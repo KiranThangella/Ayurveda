@@ -1,0 +1,24 @@
+# Cloudflare Workers config for the Next.js app itself (separate from
+# workers/ebook-cron/wrangler.toml, which is the standalone cron Worker).
+#
+# UPDATED 2026-08-16: this used to target @cloudflare/next-on-pages (Pages-based).
+# That package is now deprecated upstream in favor of @opennextjs/cloudflare, and
+# its peer range (next <=15.5.2) sits BELOW the CVE-2025-66478 patch floor
+# (next >=15.5.7) — there's no version that satisfies both, so it's not usable
+# post-upgrade anyway. This now targets @opennextjs/cloudflare instead, which
+# deploys to Workers (not Pages) and is verified compatible with next@15.5.23.
+#
+# Local build/verify (no account needed):
+#   npx opennextjs-cloudflare build
+# Preview in the real Workers runtime (workerd, not Node — closer to prod):
+#   npx opennextjs-cloudflare preview
+# Deploy (needs `wrangler login` against your Cloudflare account first):
+#   npx opennextjs-cloudflare deploy
+name = "mindwriter-ayurveda"
+main = ".open-next/worker.js"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"

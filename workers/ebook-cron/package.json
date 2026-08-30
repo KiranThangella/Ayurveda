@@ -1,0 +1,19 @@
+{
+  "name": "mindwriter-ebook-generator-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "secrets": "echo 'Run: wrangler secret put GEMINI_API_KEY   (repeat for SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PEXELS_API_KEY, MANUAL_TRIGGER_SECRET). Optional fallback providers, only needed if you want them: GROQ_API_KEY, OPENAI_API_KEY, NVIDIA_API_KEY — unset ones are just skipped.'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0",
+    "typescript": "^5.5.0",
+    "@cloudflare/workers-types": "^4.20250101.0"
+  }
+}

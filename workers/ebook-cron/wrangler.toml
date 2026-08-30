@@ -1,0 +1,27 @@
+name = "mindwriter-ebook-generator"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Runs every 20 minutes. Each invocation advances the current book generation job
+# by exactly one step (outline → one chapter → meta). CPU time billing means the
+# 15-40s spent waiting on the Gemini API response barely counts against limits —
+# only actual JS execution time does — so this comfortably fits the Workers Free plan.
+[triggers]
+crons = ["*/20 * * * *"]
+
+# Secrets — set these with `wrangler secret put <NAME>`, never commit real values:
+#   GEMINI_API_KEY
+#   SUPABASE_URL              (same value as NEXT_PUBLIC_SUPABASE_URL in the Next.js app)
+#   SUPABASE_SERVICE_ROLE_KEY
+#   PEXELS_API_KEY
+#   MANUAL_TRIGGER_SECRET     (for the optional HTTP fetch() manual-trigger endpoint)
+
+[vars]
+GEMINI_MODEL = "gemini-3.6-flash"
+
+# Cloudflare Workers AI — free fallback, no API key needed (this binding IS the
+# credential). 10,000 free "neurons"/day, already included with your Cloudflare
+# account — nothing else to sign up for.
+[ai]
+binding = "AI"
