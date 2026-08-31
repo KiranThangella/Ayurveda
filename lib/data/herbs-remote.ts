@@ -22,8 +22,7 @@ export async function fetchGeneratedHerbBySlug(slug: string): Promise<Herb | nul
   return rowToHerb(data);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToHerb(row: any): Herb {
+function rowToHerb(row: Record<string, any>): Herb {
   return {
     slug: row.slug,
     commonName: row.common_name,

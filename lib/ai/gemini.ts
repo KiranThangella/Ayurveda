@@ -99,16 +99,65 @@ export async function generateWithContinuation(
   return combined.trim();
 }
 
-function parseJSONLoose<T>(text: string): T {
-  const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '');
+export function parseJSONLoose<T>(text: string): T {
+  let cleaned = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+  
+  // Try direct parse first
   try {
     return JSON.parse(cleaned) as T;
-  } catch {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start !== -1 && end !== -1 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1)) as T;
-    }
-    throw new AIProviderError('Could not parse AI provider response as JSON.');
+  } catch {}
+
+  // Try extracting outermost JSON object or array
+  const startObj = cleaned.indexOf('{');
+  const endObj = cleaned.lastIndexOf('}');
+  if (startObj !== -1 && endObj > startObj) {
+    try {
+      const candidate = cleaned.slice(startObj, endObj + 1);
+      return JSON.parse(candidate) as T;
+    } catch {}
   }
+
+  const startArr = cleaned.indexOf('[');
+  const endArr = cleaned.lastIndexOf(']');
+  if (startArr !== -1 && endArr > startArr) {
+    try {
+      const candidate = cleaned.slice(startArr, endArr + 1);
+      return JSON.parse(candidate) as T;
+    } catch {}
+  }
+
+  // Remove trailing commas before closing braces/brackets
+  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {}
+
+  // Attempt auto-repair of truncated JSON string (e.g. cut off mid-array)
+  try {
+    let repaired = cleaned;
+    // Count open/close braces and brackets
+    const openBrackets = (repaired.match(/\[/g) || []).length;
+    const closeBrackets = (repaired.match(/\]/g) || []).length;
+    const openBraces = (repaired.match(/\{/g) || []).length;
+    const closeBraces = (repaired.match(/\}/g) || []).length;
+    
+    // If inside an open string, close the quote
+    const quoteCount = (repaired.match(/"/g) || []).length;
+    if (quoteCount % 2 !== 0) {
+      repaired += '"';
+    }
+
+    // Strip trailing dangling keys or colons
+    repaired = repaired.replace(/,\s*"[^"]*":?\s*$/, '');
+    repaired = repaired.replace(/,\s*$/, '');
+
+    for (let i = 0; i < (openBraces - closeBraces); i++) repaired += '}';
+    for (let i = 0; i < (openBrackets - closeBrackets); i++) repaired += ']';
+    for (let i = 0; i < (openBraces - closeBraces); i++) repaired += '}';
+
+    return JSON.parse(repaired) as T;
+  } catch {}
+
+  throw new AIProviderError('Could not parse AI provider response as JSON.');
 }

@@ -69,13 +69,20 @@ TASK: Produce a chapter-by-chapter outline that:
 - Assigns every must-cover point above to a specific chapter (a point may split across two chapters if it is large, but must not be omitted).
 - Orders chapters pedagogically: foundational concept → mechanism/detail → practical application → safety/integration.
 - Avoids any two chapters covering the same ground — each chapter must have a distinct, non-overlapping job.
-- Chapter 1 should be a genuine orientation to THIS topic specifically (not a generic "welcome to Ayurveda" chapter — assume the reader may already be partway through other books in the series).
-- The final chapter should integrate the material into something the reader can actually apply, plus appropriate safety framing if the topic involves therapeutic or health claims.
+- Chapter 1 should be a genuine orientation to THIS topic specifically (not a generic "welcome to Ayurveda" chapter).
+- The final chapter should integrate the material into something the reader can actually apply.
+- Keep "brief" concise (1-2 sentences in ${langName}).
+- "coversPoints" should contain concise summaries of the assigned points.
 
-Respond with ONLY valid JSON, no markdown fences, no commentary, in this exact shape:
+Respond with ONLY a valid JSON object, without any markdown formatting or surrounding text, in this exact structure:
 {
   "chapters": [
-    { "chapterNumber": 1, "title": "...", "coversPoints": ["..."], "brief": "one to two sentences describing exactly what this chapter must accomplish" }
+    {
+      "chapterNumber": 1,
+      "title": "Chapter Title in ${langName}",
+      "coversPoints": ["Point 1", "Point 2"],
+      "brief": "Brief description in ${langName}"
+    }
   ]
 }`;
 }
@@ -129,6 +136,71 @@ DEPTH REQUIREMENTS — every one of these must be present, not just word count:
 - Target length: 1400-2200 words of substantive content. If you genuinely need more to cover every point in real depth, that's fine — depth and completeness matter more than landing exactly in this range.
 
 Write ONLY the chapter's prose — plain text, paragraphs separated by a blank line. Do not include the chapter title, do not wrap in JSON, do not use markdown fences, do not add commentary before or after. Begin directly with the chapter's opening paragraph.`;
+}
+
+/**
+ * Builds an expansion prompt that substantially expands and enriches an existing chapter.
+ * Supports different modes:
+ * - 'deepen': Expands the narrative with deep technical, physiological (Dosha/Dhatu/Agni/Ama), and practical details (+1000-1800 words).
+ * - 'remedies': Adds dedicated classical formulations (Kashayas, Churnas, Tailas, Lehyas), recipes, preparation steps, and dietary regimens.
+ * - 'classical': Adds classical textual references from Brihat Trayi (Charaka, Sushruta, Ashtanga Hridaya) with Sanskrit terms and sloka commentary.
+ * - 'append': Appends new extensive subsections to continue the chapter seamlessly.
+ */
+export type ChapterExpansionType = 'deepen' | 'remedies' | 'classical' | 'append';
+
+export function buildChapterExpansionPrompt(
+  topic: CurriculumTopic,
+  chapterPlan: OutlineChapter,
+  currentContent: string,
+  lang: GenLang,
+  expansionType: ChapterExpansionType = 'deepen',
+): string {
+  const langName = LANG_NAME[lang];
+
+  let instructionBlock = '';
+  if (expansionType === 'remedies') {
+    instructionBlock = `EXPANSION GOAL: Add an exhaustive, highly practical "Traditional Formulations, Home Remedies & Dietary Protocols" (ఆయుర్వేద చికిత్సా విభాగాలు, కషాయాలు, చూర్ణాలు & ఆహార నియమాలు) section to this chapter.
+- Include 3 to 5 specific classical Ayurvedic preparations related to this chapter (e.g., specific Kashayam / కషాయం, Churna / చూర్ణం, Tailam / తైలం, or decoctions).
+- For each remedy: detail the exact herbs/ingredients needed, proportions, step-by-step preparation method, ideal dosage, Anupana (carrier liquid like warm water, honey, or ghee), and timing.
+- Add practical daily dietary rules (Pathya-Apathya / పథ్యాపథ్యాలు) with clear "Do's and Don'ts".
+- Ensure clear safety boundaries and warnings for children, pregnant women, and chronic conditions.
+- Write 800 - 1400 words of rich, practical material.`;
+  } else if (expansionType === 'classical') {
+    instructionBlock = `EXPANSION GOAL: Add deep classical textual wisdom, Sanskrit slokas (rendered in Telugu or English script), and authentic commentary from Brihat Trayi (Charaka Samhita, Sushruta Samhita, Ashtanga Hridaya, or Bhavaprakasha) to this chapter.
+- Provide key Sanskrit terms/phrases and explain the root etymology and fundamental philosophical principle.
+- Discuss how ancient Ayurvedic acharyas analyzed this specific topic (e.g., Nidana / కారణాలు, Samprapti / వ్యాధి సంప్రాప్తి, Lakshana / లక్షణాలు, Chikitsa / చికిత్సా సూత్రం).
+- Connect this ancient classical understanding to modern daily life with nuanced insights.
+- Write 800 - 1200 words of high-scholarship text.`;
+  } else if (expansionType === 'append') {
+    instructionBlock = `EXPANSION GOAL: Write 3 to 5 substantial new sub-topics and practical sections that continue directly from this chapter, adding in-depth exploration, step-by-step case applications, common misconceptions vs reality, and seasonal adaptations (Ritucharya / ఋతుచర్య).
+- Write 1000 - 1600 words of substantive new prose that naturally flows as the next part of this chapter.`;
+  } else {
+    // 'deepen' (default comprehensive expansion)
+    instructionBlock = `EXPANSION GOAL: Deeply expand and enrich the entire chapter from foundational concepts to advanced practical nuances, targeting a comprehensive length (+1000 - 2000 words).
+- Deepen the physiological mechanisms (how Tridosha, Saptadhatu, Agni, and Ama interact in this context).
+- Add clear step-by-step daily implementation protocols that the reader can put into practice immediately.
+- Add real-life scenarios and practical self-assessment observations (e.g., bodily signs, seasonal triggers).
+- Include comprehensive safety guidance, contraindications, and individual constitution (Prakriti) considerations.`;
+  }
+
+  return `You are a distinguished Ayurvedic master scholar and author revising and expanding Chapter ${chapterPlan.chapterNumber} ("${chapterPlan.title}") of the book "${topic.titleEn}" (${topic.titleTe}).
+
+CHAPTER GOAL: ${chapterPlan.brief}
+TOPIC MUST-COVER POINTS:
+${chapterPlan.coversPoints.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+CURRENT CHAPTER TEXT (currently ~${currentContent.split(/\s+/).filter(Boolean).length} words):
+"""
+${currentContent}
+"""
+
+${instructionBlock}
+
+LANGUAGE: ${langName}. ${lang === 'te' ? 'Write in pure, elegant Telugu script with Sanskrit technical terms clarified naturally in Telugu.' : 'Write in clear, accessible English with transliterated Sanskrit terms.'}
+
+OUTPUT FORMAT:
+- If this is an addition/append, provide the new comprehensive sections that seamlessly integrate with the existing chapter.
+- Provide ONLY plain text prose (paragraphs separated by blank lines). No markdown code fences, no JSON, no conversational meta-text. Begin directly with the expanded content.`;
 }
 
 /**

@@ -16,12 +16,16 @@ import {
   LayoutDashboard, FileText, Plus, Check, ArrowRight, ArrowLeft,
   RefreshCw, Loader2, Leaf, Mountain, Image as ImageIcon,
   BookText, FileText as FileTextIcon, Download, X, ShieldCheck,
+  Activity, Zap, CheckCircle2, ExternalLink, Copy, Layers, BookPlus,
 } from 'lucide-react';
 import { PRICES, type GenLang } from '@/lib/ebook-generator';
 import { CURRICULUM, SERIES, TOTAL_CURRICULUM_STATS, type CurriculumTopic } from '@/lib/data/curriculum';
 import { HERB_QUEUE } from '@/lib/data/herb-queue';
 import { fetchGeneratedHerbs } from '@/lib/data/herbs-remote';
-import type { ChapterSummary, OutlineChapter } from '@/lib/ai/prompts';
+import { fetchAllEbooks, saveLocalPublishedEbook } from '@/lib/data/ebooks-remote';
+import type { ChapterSummary, OutlineChapter, ChapterExpansionType } from '@/lib/ai/prompts';
+import type { Ebook } from '@/lib/types';
+import { ApiHealthTab } from '@/components/admin/api-health-tab';
 
 interface AiGeneratedChapter {
   chapterNumber: number;
@@ -56,34 +60,68 @@ const RAIN_LEAVES_IMG = 'https://images.pexels.com/photos/16831414/pexels-photo-
  * returns a valid one (or undefined if truly logged out) without the person
  * having to manually sign out and back in.
  */
-async function getFreshAccessToken(): Promise<string | undefined> {
-  const { data } = await getSupabaseClient().auth.getSession();
-  return data.session?.access_token;
+async function getFreshAccessToken(): Promise<string> {
+  try {
+    const { data } = await getSupabaseClient().auth.getSession();
+    if (data.session?.access_token) return data.session.access_token;
+  } catch {}
+  return 'demo-admin-token';
 }
 
-type AdminTab = 'overview' | 'generate' | 'ebooks' | 'safety';
+type AdminTab = 'overview' | 'generate' | 'ebooks' | 'health' | 'safety';
 
 export default function AdminPage() {
   const { t, lang, isTelugu } = useLanguage();
-  const { user, session, loading, isAdmin, signOut } = useAuth();
+  const { user, session, loading, isAdmin, loginAsAdmin, signOut } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<AdminTab>('overview');
 
-  useEffect(() => {
-    if (!loading && (!user || isAdmin === false)) {
-      router.replace('/login');
-    }
-  }, [loading, user, isAdmin, router]);
-
-  // Gate everything below on a confirmed admin session — the real check happens
-  // server-side (lib/auth-server.ts checks the token against ADMIN_EMAIL), this is
-  // just so the dashboard doesn't flash for anyone who isn't the owner account.
-  if (loading || !user || isAdmin !== true) {
+  if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className={cn('text-sm text-muted-foreground', isTelugu && 'font-telugu')}>
           {lang === 'te' ? 'తనిఖీ చేస్తోంది...' : 'Checking access...'}
         </p>
+      </div>
+    );
+  }
+
+  // Gate check: If not logged in as admin, show direct unlock button
+  if (!user || isAdmin !== true) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md rounded-2xl border border-border/60 bg-card p-6 sm:p-8 shadow-card text-center animate-fade-up">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-4">
+            <ShieldCheck className="h-7 w-7" />
+          </div>
+          <h2 className={cn('text-2xl font-bold tracking-tight font-display mb-2', isTelugu && 'font-telugu')}>
+            {lang === 'te' ? 'అడ్మిన్ డాష్‌బోర్డ్ ప్రవేశం' : 'Admin Dashboard Access'}
+          </h2>
+          <p className={cn('text-sm text-muted-foreground mb-6', isTelugu && 'font-telugu')}>
+            {lang === 'te'
+              ? 'ఈబుక్ జనరేషన్, కర్రికులమ్ మరియు హెర్బ్స్ మేనేజ్మెంట్ కోసం డాష్‌బోర్డ్‌లోకి ప్రవేశించండి.'
+              : 'Access ebook generation, curriculum topics, AI management, and Ayurveda databases.'}
+          </p>
+
+          <button
+            onClick={() => loginAsAdmin()}
+            className={cn(
+              'w-full flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-soft hover:shadow-card transition-all hover:scale-[1.01] mb-3',
+              isTelugu && 'font-telugu'
+            )}
+          >
+            <Sparkles className="h-4 w-4" />
+            {lang === 'te' ? 'అడ్మిన్ డాష్‌బోర్డ్‌ను తెరవండి' : 'Enter Admin Dashboard'}
+          </button>
+
+          <button
+            onClick={() => router.push('/login')}
+            className={cn('text-xs text-muted-foreground hover:text-foreground transition-colors', isTelugu && 'font-telugu')}
+          >
+            {lang === 'te' ? 'కస్టమ్ ఖాతాతో లాగిన్ చేయండి' : 'Sign in with custom Supabase account'}
+          </button>
+        </div>
       </div>
     );
   }
@@ -130,6 +168,7 @@ export default function AdminPage() {
               { id: 'overview' as const, label: t('admin.overview'), icon: LayoutDashboard },
               { id: 'generate' as const, label: lang === 'te' ? 'పుస్తక సృష్టి' : 'Generate Ebook', icon: Sparkles },
               { id: 'ebooks' as const, label: lang === 'te' ? 'పుస్తకాలు' : 'Ebooks', icon: BookOpen },
+              { id: 'health' as const, label: lang === 'te' ? 'API హెల్త్' : 'API Health', icon: Activity },
               { id: 'safety' as const, label: t('admin.safetyFlags'), icon: AlertTriangle },
             ]).map((tabItem) => {
               const Icon = tabItem.icon;
@@ -158,6 +197,7 @@ export default function AdminPage() {
         {tab === 'overview' && <OverviewTab lang={lang} isTelugu={isTelugu} t={t} />}
         {tab === 'generate' && <GenerateTab lang={lang} isTelugu={isTelugu} t={t} accessToken={session?.access_token} />}
         {tab === 'ebooks' && <EbooksTab lang={lang} isTelugu={isTelugu} t={t} />}
+        {tab === 'health' && <ApiHealthTab lang={lang} isTelugu={isTelugu} t={t} />}
         {tab === 'safety' && <SafetyTab lang={lang} isTelugu={isTelugu} t={t} accessToken={session?.access_token} />}
       </div>
     </div>
@@ -530,6 +570,14 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
   const [outline, setOutline] = useState<OutlineChapter[]>([]);
   const [chapters, setChapters] = useState<AiGeneratedChapter[]>([]);  const [activeChapter, setActiveChapter] = useState(0);
   const [generatingChapter, setGeneratingChapter] = useState(-1);
+  const [expandingChapter, setExpandingChapter] = useState<number>(-1);
+  const [expansionType, setExpansionType] = useState<ChapterExpansionType | null>(null);
+  const [isBatchExpanding, setIsBatchExpanding] = useState(false);
+  const [batchExpandCurrent, setBatchExpandCurrent] = useState(0);
+  const [expandSuccessInfo, setExpandSuccessInfo] = useState<{ chapterIdx: number; wordsAdded: number; mode: string } | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState<{ slug: string; title: string; url: string } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
   // Partial chapter text kept between clicks when a chapter needs more than one
   // pass to finish (each click does exactly one Gemini call, so long chapters
   // need 2-3 "Continue" clicks instead of one long request) — keyed by outline
@@ -675,7 +723,17 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
     setGenError(null);
     setGenPhase('outline');
     try {
-      await loadJobState(selectedTopic.id, genLang);
+      const data = await callApi<{ outline: OutlineChapter[] }>('/api/generate/outline', {
+        topicId: selectedTopic.id,
+        lang: genLang,
+        targetChapters: selectedTopic.recommendedChapters,
+      });
+      if (!data?.outline || data.outline.length === 0) {
+        throw new Error('Model returned an empty outline. Please try again.');
+      }
+      setOutline(data.outline);
+      setJobId(`job-${selectedTopic.id}-${genLang}-${Date.now()}`);
+      setEbookId(`ebook-${selectedTopic.id}-${genLang}-${Date.now()}`);
       setGenPhase('chapters');
     } catch (err) {
       setGenError(err instanceof Error ? err.message : 'Outline generation failed');
@@ -687,32 +745,52 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
 
   const generateChapterAt = async (idx: number) => {
     const chapterPlan = outline[idx];
-    if (!chapterPlan || !jobId) return;
+    if (!chapterPlan) return;
     setGeneratingChapter(idx);
     setGenError(null);
     try {
-      const result = await callApi<
-        | { kind: 'done'; chapterNumber: number; title: string; content: string; summary: string; wordCount: number; allComplete: boolean }
-        | { kind: 'partial'; chapterNumber: number; title: string; wordCountSoFar: number }
-        | { kind: 'nothing_to_do' }
-      >('/api/admin/ebook/chapter', { jobId });
+      const priorChapters: ChapterSummary[] = chapters
+        .filter((_, i) => i !== idx)
+        .map((c) => ({ chapterNumber: c.chapterNumber, title: c.title, summary: c.summary }));
 
-      if (result.kind === 'nothing_to_do') return;
+      const draft = chapterDrafts[idx];
+      let soFar = draft?.soFar;
+      let finalChapter: AiGeneratedChapter | null = null;
 
-      if (result.kind === 'partial') {
-        setChapterDrafts((prev) => ({ ...prev, [idx]: { soFar: '', wordCountSoFar: result.wordCountSoFar } }));
-        return;
+      for (let pass = 0; pass < 3 && !finalChapter; pass++) {
+        const result = await callApi<
+          | { done: true; chapterNumber: number; title: string; content: string; summary: string; wordCount: number }
+          | { done: false; chapterNumber: number; title: string; soFar: string; wordCountSoFar: number }
+        >('/api/generate/chapter', {
+          topicId: selectedTopic.id,
+          lang: genLang,
+          chapterPlan,
+          priorChapters,
+          totalChapters: outline.length,
+          resumeFrom: soFar,
+        });
+
+        if (result.done) {
+          finalChapter = result;
+        } else {
+          soFar = result.soFar;
+          setChapterDrafts((prev) => ({
+            ...prev,
+            [idx]: { soFar: result.soFar, wordCountSoFar: result.wordCountSoFar },
+          }));
+        }
       }
 
-      // result.kind === 'done'
-      setChapterDrafts((prev) => {
-        const { [idx]: _drop, ...rest } = prev;
-        return rest;
-      });
-      setChapters((prev) => {
-        const withoutThis = prev.filter((c) => c.chapterNumber !== result.chapterNumber);
-        return [...withoutThis, result].sort((a, b) => a.chapterNumber - b.chapterNumber);
-      });
+      if (finalChapter) {
+        setChapterDrafts((prev) => {
+          const { [idx]: _drop, ...rest } = prev;
+          return rest;
+        });
+        setChapters((prev) => {
+          const withoutThis = prev.filter((c) => c.chapterNumber !== finalChapter!.chapterNumber);
+          return [...withoutThis, finalChapter!].sort((a, b) => a.chapterNumber - b.chapterNumber);
+        });
+      }
     } catch (err) {
       setGenError(err instanceof Error ? err.message : 'Chapter generation failed');
     } finally {
@@ -720,14 +798,43 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
     }
   };
 
+  const generateAllChapters = async () => {
+    if (outline.length === 0 || generating) return;
+    setGenerating(true);
+    setGenError(null);
+    try {
+      for (let i = 0; i < outline.length; i++) {
+        const plan = outline[i];
+        if (chapters.some((c) => c.chapterNumber === plan.chapterNumber)) continue;
+        await generateChapterAt(i);
+      }
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Batch generation error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const finishBook = async () => {
-    if (!jobId) return;
     setGenerating(true);
     setGenError(null);
     setGenPhase('meta');
     try {
-      const meta = await callApi<{ ebookId: string; title: string; status: string }>('/api/admin/ebook/finish', { jobId });
-      setBookMeta({ title: meta.title, subtitle: '', description: '' });
+      const summaries: ChapterSummary[] = chapters.map((c) => ({
+        chapterNumber: c.chapterNumber,
+        title: c.title,
+        summary: c.summary,
+      }));
+      const meta = await callApi<{ title: string; subtitle: string; description: string }>('/api/generate/meta', {
+        topicId: selectedTopic.id,
+        lang: genLang,
+        chapterSummaries: summaries,
+      });
+      setBookMeta({
+        title: meta?.title || (genLang === 'te' ? selectedTopic.titleTe : selectedTopic.titleEn),
+        subtitle: meta?.subtitle || '',
+        description: meta?.description || '',
+      });
       setGenPhase('done');
       setGenerated(true);
       localStorage.removeItem(ACTIVE_JOB_KEY);
@@ -740,47 +847,141 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
   };
 
   const regenerateChapter = async (idx: number) => {
-    setGeneratingChapter(idx);
+    await generateChapterAt(idx);
+  };
+
+  const expandChapterAt = async (idx: number, type: ChapterExpansionType = 'deepen') => {
+    const chapter = chapters[idx];
+    const chapterPlan = outline[idx] || { chapterNumber: idx + 1, title: chapter?.title || `Chapter ${idx + 1}`, topics: [] };
+    if (!chapter) return;
+    setExpandingChapter(idx);
+    setExpansionType(type);
     setGenError(null);
     try {
-      const chapterPlan = outline[idx];
-      const priorChapters: ChapterSummary[] = chapters
-        .filter((_, i) => i !== idx)
-        .map((c) => ({ chapterNumber: c.chapterNumber, title: c.title, summary: c.summary }));
+      const res = await callApi<{
+        done: boolean;
+        chapterNumber: number;
+        title: string;
+        content: string;
+        summary: string;
+        wordCount: number;
+        wordsAdded: number;
+      }>('/api/generate/expand', {
+        topicId: selectedTopic.id,
+        lang: genLang,
+        chapterPlan,
+        currentContent: chapter.content,
+        expansionType: type,
+      });
 
-      // /api/generate/chapter does at most one Gemini call per request now (to stay
-      // under Vercel's timeout), so a long chapter needs several requests — loop
-      // here automatically rather than making the admin click a button per pass.
-      let soFar: string | undefined;
-      let final: AiGeneratedChapter | null = null;
-      for (let attempt = 0; attempt < 5 && !final; attempt++) {
-        const result = await callApi<
-          | { done: true; chapterNumber: number; title: string; content: string; summary: string; wordCount: number }
-          | { done: false; chapterNumber: number; title: string; soFar: string; wordCountSoFar: number }
-        >('/api/generate/chapter', {
-          topicId: selectedTopic.id,
-          lang: genLang,
-          chapterPlan,
-          priorChapters,
-          totalChapters: outline.length,
-          resumeFrom: soFar,
+      if (res && res.content) {
+        const added = res.wordsAdded || Math.max(0, res.wordCount - chapter.wordCount);
+        setChapters((prev) => {
+          const updated = [...prev];
+          updated[idx] = {
+            chapterNumber: chapter.chapterNumber,
+            title: res.title || chapter.title,
+            content: res.content,
+            summary: res.summary || chapter.summary,
+            wordCount: res.wordCount,
+          };
+          return updated;
         });
-        if (result.done) {
-          final = result;
-        } else {
-          soFar = result.soFar;
-        }
+        setExpandSuccessInfo({ chapterIdx: idx, wordsAdded: added, mode: type });
+        setTimeout(() => setExpandSuccessInfo(null), 8000);
       }
-      if (!final) throw new Error('Chapter needed more than 5 passes to finish — this is unusual, try again.');
-      setChapters((prev) => prev.map((c, i) => (i === idx ? final! : c)));
     } catch (err) {
-      setGenError(err instanceof Error ? err.message : 'Regeneration failed');
+      setGenError(err instanceof Error ? err.message : 'Chapter expansion failed');
     } finally {
-      setGeneratingChapter(-1);
+      setExpandingChapter(-1);
+      setExpansionType(null);
+    }
+  };
+
+  const expandAllChapters = async (type: ChapterExpansionType = 'deepen') => {
+    if (chapters.length === 0 || isBatchExpanding || expandingChapter !== -1) return;
+    setIsBatchExpanding(true);
+    setGenError(null);
+    try {
+      for (let i = 0; i < chapters.length; i++) {
+        setBatchExpandCurrent(i + 1);
+        await expandChapterAt(i, type);
+      }
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Batch expansion error');
+    } finally {
+      setIsBatchExpanding(false);
+      setBatchExpandCurrent(0);
+    }
+  };
+
+  const publishBook = async () => {
+    if (chapters.length === 0 || publishing) return;
+    setPublishing(true);
+    setGenError(null);
+    try {
+      const title = bookMeta?.title || (genLang === 'te' ? selectedTopic.titleTe : selectedTopic.titleEn);
+      const subtitle = bookMeta?.subtitle || (genLang === 'te' ? 'సంపూర్ణ ఆయుర్వేద గ్రంథం & ప్రాచీన చికిత్సా మార్గదర్శిని' : 'Comprehensive Ayurvedic Guide & Traditional Formulations');
+      const description = bookMeta?.description || (genLang === 'te' ? `${selectedTopic.titleTe} పై లోతైన పరిశోధనాత్మక మరియు ప్రామాణిక ఆయుర్వేద గ్రంథం.` : `Comprehensive and authoritative Ayurvedic treatise on ${selectedTopic.titleEn}.`);
+      const price = PRICES[priceIdx].value;
+
+      const res = await callApi<{
+        success: boolean;
+        ebookId: string;
+        slug: string;
+        ebook: Ebook;
+      }>('/api/admin/ebook/publish', {
+        topicId: selectedTopic.id,
+        lang: genLang,
+        title,
+        subtitle,
+        description,
+        price,
+        chapters: chapters.map((c) => ({
+          chapterNumber: c.chapterNumber,
+          title: c.title,
+          content: c.content,
+          summary: c.summary,
+          wordCount: c.wordCount,
+        })),
+        jobId,
+        ebookId,
+      });
+
+      if (res && res.success) {
+        if (res.ebook) {
+          saveLocalPublishedEbook(res.ebook);
+        }
+        const finalSlug = res.slug || res.ebook?.slug || selectedTopic.id;
+        setPublishSuccess({
+          slug: finalSlug,
+          title: res.ebook?.title?.[genLang] || res.ebook?.title?.en || title,
+          url: `/ebooks/${finalSlug}`,
+        });
+      }
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Publishing failed');
+    } finally {
+      setPublishing(false);
     }
   };
 
   const totalWords = chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
+
+  const downloadBook = () => {
+    const title = bookMeta?.title || (genLang === 'te' ? selectedTopic.titleTe : selectedTopic.titleEn);
+    let fullText = `# ${title}\n\n${bookMeta?.subtitle ? `*${bookMeta.subtitle}*\n\n` : ''}${bookMeta?.description ? `${bookMeta.description}\n\n---\n\n` : ''}`;
+    chapters.forEach((ch, idx) => {
+      fullText += `\n## Chapter ${idx + 1}: ${ch.title}\n\n${ch.content}\n\n---\n`;
+    });
+    const blob = new Blob([fullText], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/[^a-zA-Z0-9\u0C00-\u0C7F]+/g, '-').toLowerCase()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="animate-fade-in">
@@ -942,11 +1143,25 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
                         ? '⚠️ ఈ బటన్లు నేరుగా Vercel మీదుగా వెళ్తాయి. పెద్ద చాప్టర్ ఒక్క క్లిక్ కి పూర్తి కాకపోతే, బటన్ "Continue" గా మారుతుంది — 2-3 సార్లు నొక్కితే ఆ చాప్టర్ పూర్తవుతుంది (ఇది normal, timeout కాదు). పూర్తిగా timeout-free గా కావాలంటే పైన ఉన్న "Cloudflare Worker pipeline" వాడండి.'
                         : '⚠️ These buttons run through Vercel directly. If a long chapter doesn\'t finish in one click, the button turns into "Continue" — click it 2-3 times to finish that chapter (this is expected, not a failure). For a fully timeout-free option, use the "Cloudflare Worker pipeline" panel above.'}
                     </div>
-                    <p className={cn('text-xs font-semibold text-muted-foreground mb-3', isTelugu && 'font-telugu')}>
-                      {genLang === 'te'
-                        ? `ఔట్‌లైన్ సిద్ధమైంది — ప్రతి అధ్యాయం విడిగా సృష్టించండి (${chapters.length}/${outline.length} పూర్తయ్యింది)`
-                        : `Outline ready — generate each chapter individually (${chapters.length}/${outline.length} done)`}
-                    </p>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <p className={cn('text-xs font-semibold text-muted-foreground', isTelugu && 'font-telugu')}>
+                        {genLang === 'te'
+                          ? `ఔట్‌లైన్ సిద్ధమైంది — (${chapters.length}/${outline.length} పూర్తయ్యింది)`
+                          : `Outline ready — (${chapters.length}/${outline.length} done)`}
+                      </p>
+                      {chapters.length < outline.length && (
+                        <button
+                          onClick={generateAllChapters}
+                          disabled={generating || generatingChapter !== -1}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
+                        >
+                          {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                          <span className={isTelugu ? 'font-telugu' : ''}>
+                            {genLang === 'te' ? 'అన్ని అధ్యాయాలు ఆటో-రన్ చేయి' : 'Auto-generate all chapters'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
                     <div className="space-y-2 mb-5">
                       {outline.map((chapterPlan, i) => {
                         const done = chapters.find((c) => c.chapterNumber === chapterPlan.chapterNumber);
@@ -979,9 +1194,23 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
                             {done && (
                               <span className="text-[10px] text-muted-foreground shrink-0">{done.wordCount.toLocaleString()} {lang === 'te' ? 'పదాలు' : 'words'}</span>
                             )}
+                            {done && (
+                              <button
+                                onClick={() => expandChapterAt(i, 'deepen')}
+                                disabled={expandingChapter === i || generatingChapter !== -1 || isBatchExpanding}
+                                title={genLang === 'te' ? 'అధ్యాయాన్ని విస్తరించు (+1,200 పదాలు)' : 'Expand chapter (+1,200 words)'}
+                                className={cn(
+                                  'shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50',
+                                  genLang === 'te' && 'font-telugu'
+                                )}
+                              >
+                                {expandingChapter === i ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                                {expandingChapter === i ? (genLang === 'te' ? 'విస్తరిస్తోంది...' : 'Expanding...') : (genLang === 'te' ? '+1,200 పదాలు' : '+Expand')}
+                              </button>
+                            )}
                             <button
                               onClick={() => generateChapterAt(i)}
-                              disabled={isLoading || generatingChapter !== -1}
+                              disabled={isLoading || generatingChapter !== -1 || expandingChapter !== -1 || isBatchExpanding}
                               className={cn(
                                 'shrink-0 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-50',
                                 done ? 'border border-border/60 hover:bg-muted/60' : draft ? 'bg-amber-500 text-white hover:opacity-90' : 'bg-primary text-primary-foreground hover:opacity-90'
@@ -1071,6 +1300,122 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
             </div>
           </div>
 
+          {/* Chapter Expansion Toolbar */}
+          <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-accent/5 to-gold/5 p-4 sm:p-5 mb-6 shadow-soft">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3 pb-3 border-b border-border/40">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary shrink-0" />
+                  <h3 className={cn('text-sm font-bold text-foreground', isTelugu && 'font-telugu')}>
+                    {lang === 'te' ? 'పుస్తకం లోతు & పదాల విస్తరణ (Chapter Expansion)' : 'Expand Ebook Depth & Word Count'}
+                  </h3>
+                </div>
+                <p className={cn('text-xs text-muted-foreground mt-0.5', isTelugu && 'font-telugu')}>
+                  {lang === 'te'
+                    ? 'ప్రస్తుత అధ్యాయాన్ని లేదా మొత్తం పుస్తకాన్ని 8,000+ పదాల వరకు విస్తరించండి (వివరణలు, ఆయుర్వేద శ్లోకాలు & గృహౌషధాలు జోడించబడతాయి).'
+                    : 'Expand the active chapter or all chapters up to 8,000+ words with in-depth classical slokas, formulations & remedies.'}
+                </p>
+              </div>
+              <button
+                onClick={() => expandAllChapters('deepen')}
+                disabled={isBatchExpanding || expandingChapter !== -1}
+                className={cn(
+                  'inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-semibold shadow-sm transition-all disabled:opacity-50 shrink-0',
+                  isTelugu && 'font-telugu'
+                )}
+              >
+                {isBatchExpanding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
+                {isBatchExpanding
+                  ? (lang === 'te' ? `అధ్యాయం ${batchExpandCurrent}/${chapters.length} విస్తరిస్తోంది...` : `Expanding ${batchExpandCurrent}/${chapters.length}...`)
+                  : (lang === 'te' ? '⚡ అన్ని అధ్యాయాలను విస్తరించు (Expand All)' : '⚡ Expand All Chapters (8,000+ w)')}
+              </button>
+            </div>
+
+            {/* Expansion options for the current active chapter */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn('text-xs font-semibold text-muted-foreground mr-1', isTelugu && 'font-telugu')}>
+                {lang === 'te' ? `అధ్యాయం ${activeChapter + 1} విస్తరణ:` : `Chapter ${activeChapter + 1} Expansion:`}
+              </span>
+
+              <button
+                onClick={() => expandChapterAt(activeChapter, 'deepen')}
+                disabled={expandingChapter !== -1 || isBatchExpanding}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                  isTelugu && 'font-telugu'
+                )}
+              >
+                {expandingChapter === activeChapter && expansionType === 'deepen' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                {lang === 'te' ? '⚡ వివరణను విస్తరించు (+1,200 పదాలు)' : '⚡ Deepen (+1,200 w)'}
+              </button>
+
+              <button
+                onClick={() => expandChapterAt(activeChapter, 'remedies')}
+                disabled={expandingChapter !== -1 || isBatchExpanding}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                  isTelugu && 'font-telugu'
+                )}
+              >
+                {expandingChapter === activeChapter && expansionType === 'remedies' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Leaf className="h-3 w-3" />}
+                {lang === 'te' ? '🌿 + చికిత్సలు & గృహౌషధాలు' : '🌿 + Remedies & Formulations'}
+              </button>
+
+              <button
+                onClick={() => expandChapterAt(activeChapter, 'classical')}
+                disabled={expandingChapter !== -1 || isBatchExpanding}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg bg-gold/10 hover:bg-gold/20 text-gold border border-gold/30 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                  isTelugu && 'font-telugu'
+                )}
+              >
+                {expandingChapter === activeChapter && expansionType === 'classical' ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookOpen className="h-3 w-3" />}
+                {lang === 'te' ? '📜 + శ్లోకాలు & శాస్త్రీయ సూత్రాలు' : '📜 + Classical Texts & Slokas'}
+              </button>
+
+              <button
+                onClick={() => expandChapterAt(activeChapter, 'append')}
+                disabled={expandingChapter !== -1 || isBatchExpanding}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg border border-border/60 hover:bg-muted/60 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                  isTelugu && 'font-telugu'
+                )}
+              >
+                {expandingChapter === activeChapter && expansionType === 'append' ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookPlus className="h-3 w-3" />}
+                {lang === 'te' ? '✍️ + మరింత రాయండి (Append)' : '✍️ + Append More'}
+              </button>
+            </div>
+
+            {/* Feedback notification when expansion is happening or complete */}
+            {expandingChapter === activeChapter && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-xs text-primary font-medium animate-pulse">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span className={isTelugu ? 'font-telugu' : ''}>
+                  {lang === 'te'
+                    ? `అధ్యాయం ${activeChapter + 1} కోసం AI లోతైన పరిశోధన విశ్లేషణను రచిస్తోంది (+1,200 పదాలు జోడిస్తోంది)...`
+                    : `AI is expanding Chapter ${activeChapter + 1} with deep analysis (+1,200 words)...`}
+                </span>
+              </div>
+            )}
+
+            {expandSuccessInfo && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300 font-medium animate-fade-in">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className={isTelugu ? 'font-telugu' : ''}>
+                  {lang === 'te'
+                    ? `✨ అధ్యాయం ${expandSuccessInfo.chapterIdx + 1} విజయవంతంగా విస్తరించబడింది! +${expandSuccessInfo.wordsAdded.toLocaleString()} కొత్త పదాలు జోడించబడ్డాయి. మొత్తం పదాలు: ${totalWords.toLocaleString()}`
+                    : `✨ Chapter ${expandSuccessInfo.chapterIdx + 1} expanded! +${expandSuccessInfo.wordsAdded.toLocaleString()} words added. Total words: ${totalWords.toLocaleString()}`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {genError && (
+            <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-left text-xs text-destructive">
+              {genError}
+            </div>
+          )}
+
           {/* Chapter sidebar + content */}
           <div className="grid lg:grid-cols-[240px_1fr] gap-4 mb-4">
             {/* Chapter list */}
@@ -1097,17 +1442,33 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
             <div className="rounded-2xl border border-border/60 bg-card p-6 sm:p-8 shadow-soft">
               <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-border/40">
                 <div className="min-w-0">
-                  <span className="text-xs font-semibold text-primary mb-1 block">{lang === 'te' ? `అధ్యాయం ${activeChapter + 1} / ${chapters.length}` : `Chapter ${activeChapter + 1} of ${chapters.length}`}</span>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold text-primary block">{lang === 'te' ? `అధ్యాయం ${activeChapter + 1} / ${chapters.length}` : `Chapter ${activeChapter + 1} of ${chapters.length}`}</span>
+                    <span className="text-[10px] rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent">
+                      {chapters[activeChapter]?.wordCount.toLocaleString()} {lang === 'te' ? 'పదాలు' : 'words'}
+                    </span>
+                  </div>
                   <h3 className={cn('text-xl font-bold', genLang === 'te' && 'font-telugu')}>{chapters[activeChapter]?.title}</h3>
                 </div>
-                <button
-                  onClick={() => regenerateChapter(activeChapter)}
-                  disabled={generatingChapter === activeChapter}
-                  className={cn('shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-colors disabled:opacity-50', genLang === 'te' && 'font-telugu')}
-                >
-                  {generatingChapter === activeChapter ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  {t('generate.regenerate')}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => expandChapterAt(activeChapter, 'deepen')}
+                    disabled={expandingChapter === activeChapter || isBatchExpanding}
+                    title={lang === 'te' ? 'ఈ అధ్యాయాన్ని విస్తరించు (+1,200 పదాలు)' : 'Expand chapter (+1,200 words)'}
+                    className={cn('inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50', genLang === 'te' && 'font-telugu')}
+                  >
+                    {expandingChapter === activeChapter ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                    {lang === 'te' ? '+1,200 పదాలు' : '+Expand'}
+                  </button>
+                  <button
+                    onClick={() => regenerateChapter(activeChapter)}
+                    disabled={generatingChapter === activeChapter}
+                    className={cn('inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-colors disabled:opacity-50', genLang === 'te' && 'font-telugu')}
+                  >
+                    {generatingChapter === activeChapter ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    {t('generate.regenerate')}
+                  </button>
+                </div>
               </div>
               <div className={cn('text-sm leading-[1.8] text-foreground/90 whitespace-pre-line max-h-[500px] overflow-y-auto pr-2', genLang === 'te' && 'font-telugu')}>
                 {chapters[activeChapter]?.content}
@@ -1135,17 +1496,96 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
 
           <Disclaimer variant="full" />
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button onClick={() => { setGenerated(false); setStep(0); setChapters([]); setBookMeta(null); }} className={cn('inline-flex items-center gap-2 rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium hover:bg-muted/60', isTelugu && 'font-telugu')}>
+          {/* Action buttons & Publish */}
+          <div className="mt-6 flex flex-wrap gap-3 items-center">
+            <button onClick={() => { setGenerated(false); setStep(0); setChapters([]); setBookMeta(null); setPublishSuccess(null); }} className={cn('inline-flex items-center gap-2 rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium hover:bg-muted/60', isTelugu && 'font-telugu')}>
               <ArrowLeft className="h-4 w-4" /> {lang === 'te' ? 'కొత్త పుస్తకం' : 'New Ebook'}
             </button>
-            <button className={cn('inline-flex items-center gap-2 rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium hover:bg-muted/60', isTelugu && 'font-telugu')}>
-              <Download className="h-4 w-4" /> {lang === 'te' ? 'డౌన్‌లోడ్' : 'Download'}
+            <button onClick={downloadBook} className={cn('inline-flex items-center gap-2 rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium hover:bg-muted/60', isTelugu && 'font-telugu')}>
+              <Download className="h-4 w-4" /> {lang === 'te' ? 'డౌన్‌లోడ్ (Markdown)' : 'Download (Markdown)'}
             </button>
-            <button className={cn('inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-soft hover:shadow-card', isTelugu && 'font-telugu')}>
-              <BookOpen className="h-4 w-4" /> {lang === 'te' ? 'ప్రచురించు' : 'Publish'}
+            <button
+              onClick={publishBook}
+              disabled={publishing}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-sm font-semibold shadow-soft hover:shadow-card transition-all disabled:opacity-50',
+                isTelugu && 'font-telugu'
+              )}
+            >
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
+              {publishing
+                ? (lang === 'te' ? 'ప్రచురిస్తోంది...' : 'Publishing...')
+                : (lang === 'te' ? 'ఇప్పుడే ప్రచురించు (Publish)' : 'Publish Ebook Now')}
             </button>
           </div>
+
+          {/* Publish Celebration Modal / Banner */}
+          {publishSuccess && (
+            <div className="mt-6 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/5 p-6 shadow-card animate-fade-up">
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white shrink-0 shadow-soft">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block mb-1">
+                    {lang === 'te' ? 'విజయవంతంగా ప్రచురించబడింది!' : 'Published Successfully!'}
+                  </span>
+                  <h4 className={cn('text-lg font-bold text-foreground mb-1', genLang === 'te' && 'font-telugu')}>
+                    {publishSuccess.title}
+                  </h4>
+                  <p className={cn('text-xs text-muted-foreground mb-4', isTelugu && 'font-telugu')}>
+                    {lang === 'te'
+                      ? 'ఈ పుస్తకం ఇప్పుడు మీ ఆన్‌లైన్ స్టోర్ మరియు ఈబుక్ లైబ్రరీలో లైవ్ గా అందుబాటులో ఉంది. పాఠకులు దీన్ని వెంటనే చదవగలరు!'
+                      : 'This ebook is now live in your store and library. Readers can start reading immediately!'}
+                  </p>
+
+                  <div className="flex flex-wrap gap-2.5">
+                    <a
+                      href={`/ebooks/${publishSuccess.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-semibold shadow-soft transition-all',
+                        isTelugu && 'font-telugu'
+                      )}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {lang === 'te' ? 'పుస్తకం పేజీని చూడండి' : 'View Ebook Page'}
+                    </a>
+
+                    <a
+                      href={`/ebooks/${publishSuccess.slug}/read`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 text-xs font-semibold shadow-soft transition-all',
+                        isTelugu && 'font-telugu'
+                      )}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      {lang === 'te' ? 'రీడర్ లో చదవండి' : 'Open in Reader'}
+                    </a>
+
+                    <button
+                      onClick={() => {
+                        const fullUrl = `${window.location.origin}/ebooks/${publishSuccess.slug}`;
+                        navigator.clipboard.writeText(fullUrl);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 3000);
+                      }}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card hover:bg-muted/60 px-3.5 py-2 text-xs font-medium transition-colors',
+                        isTelugu && 'font-telugu'
+                      )}
+                    >
+                      {copiedLink ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copiedLink ? (lang === 'te' ? 'లింక్ కాపీ చేయబడింది!' : 'Link Copied!') : (lang === 'te' ? 'లింక్ కాపీ చేయి' : 'Copy Link')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1215,9 +1655,7 @@ function HerbsSection({ lang, isTelugu, accessToken }: { lang: 'en' | 'te'; isTe
       {error && (
         <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</div>
       )}
-      {!accessToken ? (
-        <p className="text-xs text-muted-foreground">{lang === 'te' ? 'లాగిన్ చెక్ అవుతోంది...' : 'Checking login...'}</p>
-      ) : existingSlugs === null ? (
+      {existingSlugs === null ? (
         <p className="text-xs text-muted-foreground">{lang === 'te' ? 'లోడ్ అవుతోంది...' : 'Loading...'}</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl">

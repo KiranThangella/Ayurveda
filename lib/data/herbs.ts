@@ -16,6 +16,8 @@ export const herbs: Herb[] = [
     ],
     category: 'herbs',
     imageQuery: 'turmeric powder roots',
+    imageUrl: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=1600&q=85',
+    imagePhotographer: 'Chandra Oh',
     introduction: {
       en: 'Turmeric is one of the most widely used and revered herbs in Ayurveda. Known for its vibrant golden color, it has been a cornerstone of Indian cooking, ritual, and traditional medicine for thousands of years.',
       te: 'పసుపు ఆయుర్వేదంలో అత్యధికంగా ఉపయోగించబడే మరియు పూజనీయమైన మూలికలలో ఒకటి. దాని స్వర్ణవర్ణానికి ప్రసిద్ధి చెందిన ఇది, వేలాది సంవత్సరాలుగా భారతీయ వంటకాలు, ఆచారాలు మరియు సంప్రదాయ వైద్యంలో మూలస్తంభంగా నిలిచింది.',
@@ -97,6 +99,8 @@ export const herbs: Herb[] = [
     ],
     category: 'herbs',
     imageQuery: 'ashwagandha root powder plant',
+    imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1600&q=85',
+    imagePhotographer: 'Ashwagandha Roots & Botanicals',
     introduction: {
       en: 'Ashwagandha is one of the most important herbs in Ayurveda, classified as a Rasayana — a rejuvenating herb. Its name translates to "smell of a horse," referring both to its distinct odor and the traditional belief that it imparts the strength of a horse.',
       te: 'అశ్వగంధ ఆయుర్వేదంలో అత్యంత ముఖ్యమైన మూలికలలో ఒకటి, దీనిని రసాయనం — పునరుజ్జీవన మూలికగా వర్గీకరించారు. దీని పేరుకు "గుర్రపు వాసన" అని అర్థం, ఇది దాని ప్రత్యేక వాసనకు మరియు గుర్రపు బలాన్ని ఇస్తుందనే సంప్రదాయ నమ్మకానికి సూచన.',
@@ -178,6 +182,8 @@ export const herbs: Herb[] = [
     ],
     category: 'herbs',
     imageQuery: 'tulsi holy basil plant leaves',
+    imageUrl: 'https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?auto=format&fit=crop&w=1600&q=85',
+    imagePhotographer: 'Holy Basil Fresh Leaves',
     introduction: {
       en: 'Tulsi, or Holy Basil, is revered in Indian culture as a sacred plant and is one of the most cherished herbs in Ayurveda. Found in many Indian homes, it is traditionally worshipped and valued for its purifying properties.',
       te: 'తులసి, లేదా పవిత్ర తులసి, భారతీయ సంస్కృతిలో పవిత్ర మొక్కగా పూజించబడుతుంది మరియు ఆయుర్వేదంలో అత్యంత ప్రీతిపాత్రమైన మూలికలలో ఒకటి. చాలా భారతీయ ఇళ్లలో కనిపిస్తుంది, సంప్రదాయంగా పూజించబడుతుంది మరియు శుద్ధి చేసే గుణాలకు విలువైనదిగా పరిగణిస్తారు.',
@@ -255,6 +261,8 @@ export const herbs: Herb[] = [
     ],
     category: 'herbs',
     imageQuery: 'neem tree leaves',
+    imageUrl: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1600&q=85',
+    imagePhotographer: 'Neem Green Medicinal Foliage',
     introduction: {
       en: 'Neem is a versatile tree native to the Indian subcontinent, used in Ayurveda for centuries. Every part of the neem tree — leaves, bark, seeds, and oil — has traditional uses in wellness and skin care.',
       te: 'వేప భారత ఉపఖండానికి చెందిన బహుముఖ వృక్షం, శతాబ్దాలుగా ఆయుర్వేదంలో ఉపయోగించబడుతోంది. వేప చెట్టు ప్రతి భాగం — ఆకులు, బెరడు, గింజలు, నూనె — ఆరోగ్యం మరియు చర్మ సంరక్షణలో సంప్రదాయ ఉపయోగాలు కలిగి ఉంది.',
@@ -332,6 +340,8 @@ export const herbs: Herb[] = [
     ],
     category: 'spices',
     imageQuery: 'ginger root fresh',
+    imageUrl: 'https://images.unsplash.com/photo-1615485500704-8e990f9900f7?auto=format&fit=crop&w=1600&q=85',
+    imagePhotographer: 'Fresh Organic Ginger Root',
     introduction: {
       en: 'Ginger is one of the most widely used spices and herbs in both Ayurveda and Indian cooking. Known as a "universal medicine" in Ayurvedic tradition, it is valued for its warming properties and versatility.',
       te: 'అల్లం ఆయుర్వేదం మరియు భారతీయ వంటలో అత్యధికంగా ఉపయోగించబడే సుగంధ ద్రవ్యాలు మరియు మూలికలలో ఒకటి. ఆయుర్వేద సంప్రదాయంలో "సార్వత్రిక ఔషధం" గా పిలువబడుతుంది, దీని వేడి గుణాలు మరియు బహుముఖతకు విలువైనది.',
@@ -409,6 +419,8 @@ export const herbs: Herb[] = [
     ],
     category: 'herbs',
     imageQuery: 'amla indian gooseberry fruit',
+    imageUrl: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=1600&q=85',
+    imagePhotographer: 'Indian Gooseberry Amla',
     introduction: {
       en: 'Amla, or Indian Gooseberry, is one of the most celebrated herbs in Ayurveda. It is considered a premier Rasayana (rejuvenating) herb and is a key ingredient in the classical formulation Chyavanaprasha.',
       te: 'ఉసిరికాయ, లేదా ఇండియన్ గూస్‌బెర్రీ, ఆయుర్వేదంలో అత్యంత ప్రసిద్ధి చెందిన మూలికలలో ఒకటి. ఇది ప్రధాన రసాయన (పునరుజ్జీవన) మూలికగా పరిగణించబడుతుంది మరియు శాస్త్రీయ తయారీ చ్యవనప్రాశలో ముఖ్య ఘటకం.',
@@ -490,6 +502,8 @@ export const herbs: Herb[] = [
     ],
     category: 'herbs',
     imageQuery: 'brahmi bacopa plant leaves',
+    imageUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1600&q=85',
+    imagePhotographer: 'Bacopa Brahmi Plant',
     introduction: {
       en: 'Brahmi is a revered herb in Ayurveda, traditionally associated with cognitive wellness and mental clarity. Its name is derived from "Brahma," reflecting its connection to consciousness and wisdom in Indian tradition.',
       te: 'బ్రాహ్మి ఆయుర్వేదంలో పూజనీయమైన మూలిక, సంప్రదాయంగా జ్ఞాన ఆరోగ్యం మరియు మానసిక స్పష్టతతో సంబంధం కలిగి ఉంది. దాని పేరు "బ్రహ్మ" నుండి ఉద్భవించింది, భారతీయ సంప్రదాయంలో చైతన్యం మరియు జ్ఞానంతో దాని సంబంధాన్ని సూచిస్తుంది.',
@@ -561,3 +575,39 @@ export function getHerbBySlug(slug: string): Herb | undefined {
 export function getHerbsByCategory(category: string): Herb[] {
   return herbs.filter((h) => h.category === category);
 }
+
+// Fallback curated imagery for dynamic / generated herbs
+const HERB_IMAGE_MAP: Record<string, string> = {
+  turmeric: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=1600&q=85',
+  ashwagandha: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1600&q=85',
+  tulsi: 'https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?auto=format&fit=crop&w=1600&q=85',
+  neem: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1600&q=85',
+  ginger: 'https://images.unsplash.com/photo-1615485500704-8e990f9900f7?auto=format&fit=crop&w=1600&q=85',
+  amla: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=1600&q=85',
+  brahmi: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1600&q=85',
+  triphala: 'https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&w=1600&q=85',
+  guggulu: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=1600&q=85',
+  shatavari: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1600&q=85',
+  licorice: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=1600&q=85',
+  cardamom: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1600&q=85',
+  clove: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1600&q=85',
+  cinnamon: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=1600&q=85',
+  moringa: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1600&q=85',
+  giloy: 'https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?auto=format&fit=crop&w=1600&q=85',
+};
+
+const DEFAULT_BOTANICAL_IMAGE = 'https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?auto=format&fit=crop&w=1600&q=85';
+
+export function getHerbImageUrl(herb?: Partial<Herb> | null): string {
+  if (!herb) return DEFAULT_BOTANICAL_IMAGE;
+  if (herb.imageUrl && herb.imageUrl.trim().length > 0) return herb.imageUrl;
+  if (herb.slug && HERB_IMAGE_MAP[herb.slug.toLowerCase()]) {
+    return HERB_IMAGE_MAP[herb.slug.toLowerCase()];
+  }
+  const cleanName = (herb.commonName || herb.englishName || '').toLowerCase();
+  for (const [key, url] of Object.entries(HERB_IMAGE_MAP)) {
+    if (cleanName.includes(key)) return url;
+  }
+  return DEFAULT_BOTANICAL_IMAGE;
+}
+

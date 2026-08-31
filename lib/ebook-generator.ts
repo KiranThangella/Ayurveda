@@ -58,7 +58,7 @@ const STYLE_WORDS: Record<number, { en: string; te: string }> = {
   3: { en: 'spiritual and philosophical', te: 'ఆధ్యాత్మిక మరియు తాత్విక' },
 };
 
-function countWords(text: string): number {
+export function countWords(text: string): number {
   return text.split(/\s+/).filter(w => w.length > 0).length;
 }
 
@@ -433,3 +433,4 @@ export function buildBookMeta(
     description: `A comprehensive guide to ${info.titleEn}. ${chaptersCount} chapters, approximately ${totalWords.toLocaleString()} words. Traditional Ayurvedic wisdom in an accessible, human tone.`,
   };
 }
+

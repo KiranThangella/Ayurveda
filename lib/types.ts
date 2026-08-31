@@ -38,11 +38,13 @@ export interface EbookChapter {
 }
 
 export interface Ebook {
+  id?: string;
   slug: string;
   title: BilingualText;
   subtitle: BilingualText;
   description: BilingualText;
   coverQuery: string;
+  coverImage?: string;
   category: string;
   language: Language;
   readingTime: number;

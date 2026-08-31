@@ -1,26 +1,49 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { getEbookBySlug, ebooks } from '@/lib/data/ebooks';
+import { fetchEbookBySlug } from '@/lib/data/ebooks-remote';
+import type { Ebook } from '@/lib/types';
 import { categories } from '@/lib/data/categories';
 import { Disclaimer } from '@/components/disclaimer';
 import { ShareButtons } from '@/components/share-buttons';
 import { EbookCard } from '@/components/ebook-card';
-import { ArrowLeft, Clock, Star, BookOpen, CheckCircle, FileText, BookMarked } from 'lucide-react';
+import { ArrowLeft, Clock, Star, BookOpen, CheckCircle, FileText, BookMarked, Loader2 } from 'lucide-react';
 
 export default function EbookDetailClient({ slug }: { slug: string }) {
   const { t, lang, isTelugu } = useLanguage();
-  const ebook = getEbookBySlug(slug);
+  const [ebook, setEbook] = useState<Ebook | undefined | null>(() => getEbookBySlug(slug) || null);
+  const [loading, setLoading] = useState(!ebook);
+
+  useEffect(() => {
+    if (!ebook) {
+      setLoading(true);
+      fetchEbookBySlug(slug).then((res) => {
+        setEbook(res || undefined);
+        setLoading(false);
+      });
+    }
+  }, [slug, ebook]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">{lang === 'te' ? 'పుస్తకం లోడ్ అవుతోంది...' : 'Loading ebook...'}</p>
+      </div>
+    );
+  }
 
   if (!ebook) return notFound();
 
   const category = categories.find((c) => c.slug === ebook.category);
-  const title = ebook.title[lang] || ebook.title.en;
-  const subtitle = ebook.subtitle[lang] || ebook.subtitle.en;
-  const description = ebook.description[lang] || ebook.description.en;
+  const title = (ebook.title && (ebook.title[lang] || ebook.title.en)) || '';
+  const subtitle = (ebook.subtitle && (ebook.subtitle[lang] || ebook.subtitle.en)) || '';
+  const description = (ebook.description && (ebook.description[lang] || ebook.description.en)) || '';
   const related = ebooks.filter((e) => e.slug !== ebook.slug && e.category === ebook.category).slice(0, 4);
 
   return (

@@ -1,0 +1,8 @@
+{
+  "name": "Evergreen Ayurveda",
+  "description": "Explore timeless Indian wellness traditions through beautifully designed ebooks, guides, herbs encyclopedia, dosha analyzer, and educational resources in Telugu and English.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

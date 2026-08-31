@@ -25,9 +25,11 @@
  */
 
 export class AIProviderError extends Error {
+  public statusCode?: number;
   constructor(message: string, public status?: number) {
     super(message);
     this.name = 'AIProviderError';
+    this.statusCode = status;
   }
 }
 
@@ -74,75 +76,202 @@ interface ProviderDef {
   maxOutputTokensCap?: number;
 }
 
-async function callGemini(apiKey: string, model: string, prompt: string, opts: CallOpts) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: opts.temperature ?? 0.7,
-      maxOutputTokens: opts.maxOutputTokens ?? 8192,
-      ...(opts.json ? { responseMimeType: 'application/json' } : {}),
-    },
-  };
-
-  const res = await fetch(`${endpoint}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new AIProviderError(`gemini API error (${res.status}): ${errText}`, res.status);
+function isValidJSON(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+  try {
+    JSON.parse(cleaned);
+    return true;
+  } catch {}
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try {
+      JSON.parse(cleaned.slice(start, end + 1));
+      return true;
+    } catch {}
   }
-
-  const data = await res.json();
-  const promptBlockReason: string | undefined = data?.promptFeedback?.blockReason;
-  if (promptBlockReason) throw new AIProviderSafetyBlockError('gemini', promptBlockReason);
-
-  const candidate = data?.candidates?.[0];
-  const finishReason: string | undefined = candidate?.finishReason;
-  const text: string | undefined = candidate?.content?.parts?.[0]?.text;
-
-  if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
-    throw new AIProviderSafetyBlockError('gemini', finishReason);
+  const startArr = cleaned.indexOf('[');
+  const endArr = cleaned.lastIndexOf(']');
+  if (startArr !== -1 && endArr > startArr) {
+    try {
+      JSON.parse(cleaned.slice(startArr, endArr + 1));
+      return true;
+    } catch {}
   }
-  if (!text) throw new AIProviderSafetyBlockError('gemini', finishReason || 'empty response, no reason given');
-
-  return { text, truncated: finishReason === 'MAX_TOKENS' };
+  return false;
 }
+
+async function callGemini(apiKey: string, model: string, prompt: string, opts: CallOpts) {
+  // Standard and current Gemini models to try in sequence.
+  const modelsToTry = [
+    model,
+    'gemini-2.5-flash',
+    'gemini-3.7-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest',
+    'gemini-2.5-pro',
+    'gemini-3.1-pro-preview',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+  ].filter((m, i, a) => Boolean(m) && a.indexOf(m) === i);
+
+  let lastError: Error | null = null;
+  const attemptsLog: string[] = [];
+
+  for (const candidateModel of modelsToTry) {
+    const cleanModel = candidateModel.replace(/^models\//, '');
+    const versions = ['v1beta', 'v1'];
+    
+    for (const apiVersion of versions) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${cleanModel}:generateContent`;
+        
+        let body: Record<string, unknown> = {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: opts.temperature ?? 0.7,
+            maxOutputTokens: opts.maxOutputTokens ?? 8192,
+            ...(opts.json ? { responseMimeType: 'application/json' } : {}),
+          },
+        };
+
+        let res = await fetch(`${endpoint}?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        // If 400 Bad Request with responseMimeType: application/json, fallback to plain text instruction
+        if (!res.ok && res.status === 400 && opts.json) {
+          body = {
+            contents: [{ parts: [{ text: `Respond strictly with valid JSON format.\n\n${prompt}` }] }],
+            generationConfig: {
+              temperature: opts.temperature ?? 0.7,
+              maxOutputTokens: opts.maxOutputTokens ?? 8192,
+            },
+          };
+          res = await fetch(`${endpoint}?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        }
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          attemptsLog.push(`${cleanModel}(${apiVersion}): HTTP ${res.status}`);
+          lastError = new AIProviderError(`gemini ${cleanModel} (${apiVersion}) returned ${res.status}: ${errText.slice(0, 120)}`, res.status);
+          continue;
+        }
+
+        const data = await res.json();
+        const promptBlockReason: string | undefined = data?.promptFeedback?.blockReason;
+        if (promptBlockReason) throw new AIProviderSafetyBlockError('gemini', promptBlockReason);
+
+        const candidate = data?.candidates?.[0];
+        const finishReason: string | undefined = candidate?.finishReason;
+        const text: string | undefined = candidate?.content?.parts?.[0]?.text;
+
+        if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
+          throw new AIProviderSafetyBlockError('gemini', finishReason);
+        }
+        if (!text) throw new AIProviderSafetyBlockError('gemini', finishReason || 'empty response, no reason given');
+
+        return { text, truncated: finishReason === 'MAX_TOKENS' };
+      } catch (err) {
+        if (err instanceof AIProviderSafetyBlockError) throw err;
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
+    }
+  }
+
+  throw lastError || new AIProviderError(`All gemini candidate models failed (${attemptsLog.join(', ')})`);
+}
+
+const PROVIDER_FALLBACK_MODELS: Record<string, string[]> = {
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
+  nvidia: ['meta/llama-3.1-70b-instruct', 'meta/llama-3.1-8b-instruct', 'mistralai/mixtral-8x7b-instruct-v0.1', 'nvidia/nemotron-4-340b-instruct'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'],
+};
 
 /** Shared caller for any OpenAI-compatible /v1/chat/completions endpoint (Groq, OpenAI, NVIDIA NIM, and any future addition). */
 function makeOpenAICompatibleCaller(providerName: string, baseUrl: string): ProviderCaller {
   return async (apiKey: string, model: string, prompt: string, opts: CallOpts) => {
-    const body: Record<string, unknown> = {
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: opts.temperature ?? 0.7,
-      max_tokens: opts.maxOutputTokens ?? 8192,
-    };
-    if (opts.json) body.response_format = { type: 'json_object' };
+    const fallbackList = PROVIDER_FALLBACK_MODELS[providerName] || [];
+    const modelsToTry = [model, ...fallbackList].filter((m, i, a) => Boolean(m) && a.indexOf(m) === i);
 
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body),
-    });
+    let lastError: Error | null = null;
+    const attemptsLog: string[] = [];
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new AIProviderError(`${providerName} API error (${res.status}): ${errText}`, res.status);
+    for (const candidateModel of modelsToTry) {
+      const messages: Array<{ role: string; content: string }> = [];
+      if (opts.json) {
+        messages.push({
+          role: 'system',
+          content: 'You are an expert Ayurvedic assistant. You MUST respond with ONLY a valid, parseable JSON object matching the requested schema. No markdown formatting, no explanations outside JSON.',
+        });
+      }
+      messages.push({ role: 'user', content: prompt });
+
+      const body: Record<string, unknown> = {
+        model: candidateModel,
+        messages,
+        temperature: opts.temperature ?? 0.7,
+        max_tokens: opts.maxOutputTokens ?? 8192,
+      };
+      if (opts.json) body.response_format = { type: 'json_object' };
+
+      try {
+        let res = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(body),
+        });
+
+        // Some models or providers fail on json_object response_format (400)
+        if (!res.ok && res.status === 400 && opts.json) {
+          delete body.response_format;
+          res = await fetch(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify(body),
+          });
+        }
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          attemptsLog.push(`${candidateModel}: HTTP ${res.status}`);
+          // 404 (model not found), 410 (Gone / EOL), 400 (unsupported model) -> try next fallback model
+          if (res.status === 404 || res.status === 410 || res.status === 400 || res.status === 429 || res.status === 503) {
+            lastError = new AIProviderError(`${providerName} model ${candidateModel} error (${res.status}): ${errText.slice(0, 150)}`, res.status);
+            continue;
+          }
+          throw new AIProviderError(`${providerName} API error (${res.status}): ${errText}`, res.status);
+        }
+
+        const data = await res.json();
+        const choice = data?.choices?.[0];
+        const finishReason: string | undefined = choice?.finish_reason;
+        const text: string | undefined = choice?.message?.content;
+
+        if (finishReason === 'content_filter') throw new AIProviderSafetyBlockError(providerName, finishReason);
+        if (!text) throw new AIProviderSafetyBlockError(providerName, finishReason || 'empty response, no reason given');
+
+        return { text, truncated: finishReason === 'length' };
+      } catch (err) {
+        if (err instanceof AIProviderSafetyBlockError) throw err;
+        if (err instanceof AIProviderError && err.statusCode && ![404, 410, 400, 429, 503].includes(err.statusCode)) {
+          throw err;
+        }
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
     }
 
-    const data = await res.json();
-    const choice = data?.choices?.[0];
-    const finishReason: string | undefined = choice?.finish_reason;
-    const text: string | undefined = choice?.message?.content;
-
-    if (finishReason === 'content_filter') throw new AIProviderSafetyBlockError(providerName, finishReason);
-    if (!text) throw new AIProviderSafetyBlockError(providerName, finishReason || 'empty response, no reason given');
-
-    return { text, truncated: finishReason === 'length' };
+    throw lastError || new AIProviderError(`${providerName} all models failed (${attemptsLog.join(', ')})`);
   };
 }
 
@@ -217,30 +346,193 @@ function makeCloudflareWorkersAICaller(): ProviderCaller {
   };
 }
 
+export interface ProviderHealthMetric {
+  name: string;
+  group: 'gemini' | 'groq' | 'nvidia' | 'deepseek' | 'openai' | 'cloudflare' | 'ollama' | 'other';
+  apiKeyEnv: string;
+  isConfigured: boolean;
+  maskedKey: string;
+  model: string;
+  totalCalls: number;
+  successCount: number;
+  failureCount: number;
+  successRate: number; // 0 to 100
+  avgLatencyMs: number;
+  lastLatencyMs: number | null;
+  lastStatus: 'healthy' | 'error' | 'untested' | 'unconfigured';
+  lastError: string | null;
+  lastTestedAt: string | null;
+  testedModel?: string;
+}
+
+// In-memory runtime health stats tracker
+const runtimeStats: Record<
+  string,
+  {
+    totalCalls: number;
+    successCount: number;
+    failureCount: number;
+    totalLatencyMs: number;
+    lastLatencyMs: number | null;
+    lastStatus: 'healthy' | 'error' | 'untested';
+    lastError: string | null;
+    lastTestedAt: string | null;
+    testedModel?: string;
+  }
+> = {};
+
+function maskKey(key?: string): string {
+  if (!key) return '(not set)';
+  if (key.length <= 8) return '****';
+  return `${key.slice(0, 6)}...${key.slice(-4)}`;
+}
+
+function getProviderGroup(name: string): ProviderHealthMetric['group'] {
+  if (name.startsWith('gemini') || name.startsWith('google')) return 'gemini';
+  if (name === 'groq') return 'groq';
+  if (name === 'nvidia') return 'nvidia';
+  if (name === 'deepseek') return 'deepseek';
+  if (name === 'openai') return 'openai';
+  if (name.includes('cloudflare')) return 'cloudflare';
+  if (name === 'ollama') return 'ollama';
+  return 'other';
+}
+
+function recordStat(name: string, success: boolean, latencyMs: number, errorMsg: string | null, testedModel?: string) {
+  if (!runtimeStats[name]) {
+    runtimeStats[name] = {
+      totalCalls: 0,
+      successCount: 0,
+      failureCount: 0,
+      totalLatencyMs: 0,
+      lastLatencyMs: null,
+      lastStatus: 'untested',
+      lastError: null,
+      lastTestedAt: null,
+    };
+  }
+  const s = runtimeStats[name];
+  s.totalCalls += 1;
+  s.lastTestedAt = new Date().toISOString();
+  s.lastLatencyMs = latencyMs;
+  s.totalLatencyMs += latencyMs;
+  if (testedModel) s.testedModel = testedModel;
+
+  if (success) {
+    s.successCount += 1;
+    s.lastStatus = 'healthy';
+    s.lastError = null;
+  } else {
+    s.failureCount += 1;
+    s.lastStatus = 'error';
+    s.lastError = errorMsg;
+  }
+}
+
 /**
  * Fallback order. A provider is skipped (not just failed) if its API key env
  * var isn't set — so this works with just GEMINI_API_KEY configured (today's
  * setup) and gets more resilient as more keys are added, no code change needed.
- *
- * Model IDs below are current as of Aug 2026 — providers retire models on
- * their own schedules (this whole feature exists because gemini-2.0-flash got
- * retired), so treat these as "known-good today," not permanent. Override any
- * of them without a redeploy via the matching *_MODEL env var.
  */
-const PROVIDER_ORDER: ProviderDef[] = [
-  { name: 'gemini', apiKeyEnv: 'GEMINI_API_KEY', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-3.6-flash', call: callGemini },
-  { name: 'gemini-2', apiKeyEnv: 'GEMINI_API_KEY_2', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-3.6-flash', call: callGemini },
-  { name: 'gemini-3', apiKeyEnv: 'GEMINI_API_KEY_3', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-3.6-flash', call: callGemini },
-  { name: 'groq', apiKeyEnv: 'GROQ_API_KEY', modelEnv: 'GROQ_MODEL', defaultModel: 'openai/gpt-oss-120b', call: makeOpenAICompatibleCaller('groq', 'https://api.groq.com/openai/v1'), maxOutputTokensCap: 4000 },
+export const PROVIDER_ORDER: ProviderDef[] = [
+  { name: 'gemini', apiKeyEnv: 'GEMINI_API_KEY', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'gemini-2', apiKeyEnv: 'GEMINI_API_KEY_2', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'gemini-3', apiKeyEnv: 'GEMINI_API_KEY_3', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'gemini-4', apiKeyEnv: 'GEMINI_API_KEY_4', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'gemini-5', apiKeyEnv: 'GEMINI_API_KEY_5', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'gemini-6', apiKeyEnv: 'GEMINI_API_KEY_6', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'google-ai', apiKeyEnv: 'GOOGLE_API_KEY', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'google-genai', apiKeyEnv: 'GOOGLE_GENAI_API_KEY', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash', call: callGemini },
+  { name: 'groq', apiKeyEnv: 'GROQ_API_KEY', modelEnv: 'GROQ_MODEL', defaultModel: 'llama-3.3-70b-versatile', call: makeOpenAICompatibleCaller('groq', 'https://api.groq.com/openai/v1'), maxOutputTokensCap: 8000 },
   { name: 'cloudflare-workers-ai', apiKeyEnv: 'CF_API_TOKEN', modelEnv: 'CF_WORKERS_AI_MODEL', defaultModel: '@cf/meta/llama-3.1-8b-instruct', call: makeCloudflareWorkersAICaller() },
-  { name: 'deepseek', apiKeyEnv: 'DEEPSEEK_API_KEY', modelEnv: 'DEEPSEEK_MODEL', defaultModel: 'deepseek-v4-flash', call: makeOpenAICompatibleCaller('deepseek', 'https://api.deepseek.com/v1') },
-  { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL', defaultModel: 'gpt-5.6', call: makeOpenAICompatibleCaller('openai', 'https://api.openai.com/v1') },
+  { name: 'deepseek', apiKeyEnv: 'DEEPSEEK_API_KEY', modelEnv: 'DEEPSEEK_MODEL', defaultModel: 'deepseek-chat', call: makeOpenAICompatibleCaller('deepseek', 'https://api.deepseek.com/v1') },
+  { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL', defaultModel: 'gpt-4o-mini', call: makeOpenAICompatibleCaller('openai', 'https://api.openai.com/v1') },
   { name: 'nvidia', apiKeyEnv: 'NVIDIA_API_KEY', modelEnv: 'NVIDIA_MODEL', defaultModel: 'meta/llama-3.1-70b-instruct', call: makeOpenAICompatibleCaller('nvidia', 'https://integrate.api.nvidia.com/v1') },
-  // Local-only — only fires if OLLAMA_BASE_URL is set, which should never be
-  // true in production. Placed last: a locally-installed model exists purely
-  // for offline/dev use, not as a preferred path over hosted providers.
   { name: 'ollama', apiKeyEnv: 'OLLAMA_BASE_URL', modelEnv: 'OLLAMA_MODEL', defaultModel: 'llama3.1', call: makeOllamaCaller() },
 ];
+
+export function getProvidersHealthSummary(getEnv: (key: string) => string | undefined): ProviderHealthMetric[] {
+  return PROVIDER_ORDER.map((p) => {
+    const rawKey = getEnv(p.apiKeyEnv);
+    const isConfigured = Boolean(rawKey && rawKey.trim().length > 0);
+    const model = getEnv(p.modelEnv) || p.defaultModel;
+    const stat = runtimeStats[p.name] || {
+      totalCalls: 0,
+      successCount: 0,
+      failureCount: 0,
+      totalLatencyMs: 0,
+      lastLatencyMs: null,
+      lastStatus: 'untested',
+      lastError: null,
+      lastTestedAt: null,
+    };
+
+    const avgLatencyMs = stat.totalCalls > 0 ? Math.round(stat.totalLatencyMs / stat.totalCalls) : 0;
+    const successRate = stat.totalCalls > 0 ? Math.round((stat.successCount / stat.totalCalls) * 100) : 0;
+
+    return {
+      name: p.name,
+      group: getProviderGroup(p.name),
+      apiKeyEnv: p.apiKeyEnv,
+      isConfigured,
+      maskedKey: maskKey(rawKey),
+      model,
+      totalCalls: stat.totalCalls,
+      successCount: stat.successCount,
+      failureCount: stat.failureCount,
+      successRate,
+      avgLatencyMs,
+      lastLatencyMs: stat.lastLatencyMs,
+      lastStatus: !isConfigured ? 'unconfigured' : stat.lastStatus,
+      lastError: stat.lastError,
+      lastTestedAt: stat.lastTestedAt,
+      testedModel: stat.testedModel,
+    };
+  });
+}
+
+/**
+ * Diagnostic test for a single provider or all providers.
+ */
+export async function testProviderHealth(
+  providerName: string,
+  getEnv: (key: string) => string | undefined,
+  testPrompt = 'Respond with JSON: {"status": "ok", "provider": "test"}'
+): Promise<{ success: boolean; latencyMs: number; response?: string; error?: string; provider: string }> {
+  const provider = PROVIDER_ORDER.find((p) => p.name === providerName);
+  if (!provider) {
+    return { success: false, latencyMs: 0, error: `Unknown provider: ${providerName}`, provider: providerName };
+  }
+
+  const apiKey = getEnv(provider.apiKeyEnv);
+  if (!apiKey) {
+    return {
+      success: false,
+      latencyMs: 0,
+      error: `API key ${provider.apiKeyEnv} is not set in environment`,
+      provider: providerName,
+    };
+  }
+
+  const model = getEnv(provider.modelEnv) || provider.defaultModel;
+  const start = Date.now();
+
+  try {
+    const res = await provider.call(apiKey, model, testPrompt, {
+      json: true,
+      maxOutputTokens: 256,
+      temperature: 0.2,
+    });
+    const latencyMs = Date.now() - start;
+    recordStat(provider.name, true, latencyMs, null, model);
+    return { success: true, latencyMs, response: res.text.slice(0, 150), provider: provider.name };
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    recordStat(provider.name, false, latencyMs, errorMsg, model);
+    return { success: false, latencyMs, error: errorMsg, provider: provider.name };
+  }
+}
 
 function configuredProviders(getEnv: (key: string) => string | undefined) {
   return PROVIDER_ORDER
@@ -266,22 +558,38 @@ export async function callWithFallback(getEnv: (key: string) => string | undefin
 
   const failures: string[] = [];
   for (const provider of providers) {
+    const callStart = Date.now();
     try {
       const callOpts: CallOpts = provider.maxOutputTokensCap
         ? { ...opts, maxOutputTokens: Math.min(opts.maxOutputTokens ?? 8192, provider.maxOutputTokensCap) }
         : opts;
       let result = await provider.call(provider.apiKey, provider.model, prompt, callOpts);
-      if (opts.json && result.truncated) {
-        const biggerBudget = Math.min((callOpts.maxOutputTokens ?? 8192) * 2, provider.maxOutputTokensCap ?? 32768);
-        result = await provider.call(provider.apiKey, provider.model, prompt, { ...callOpts, maxOutputTokens: biggerBudget });
+      
+      if (opts.json) {
+        if (isValidJSON(result.text)) {
+          recordStat(provider.name, true, Date.now() - callStart, null, provider.model);
+          return { ...result, truncated: false, provider: provider.name };
+        }
+        if (result.truncated) {
+          const biggerBudget = Math.min((callOpts.maxOutputTokens ?? 8192) * 2, provider.maxOutputTokensCap ?? 32768);
+          result = await provider.call(provider.apiKey, provider.model, prompt, { ...callOpts, maxOutputTokens: biggerBudget });
+          if (isValidJSON(result.text)) {
+            recordStat(provider.name, true, Date.now() - callStart, null, provider.model);
+            return { ...result, truncated: false, provider: provider.name };
+          }
+          const errReason = `${provider.name}: truncated at the token limit before valid JSON completed (retried with a larger budget, still invalid JSON)`;
+          recordStat(provider.name, false, Date.now() - callStart, errReason, provider.model);
+          failures.push(errReason);
+          continue;
+        }
       }
-      if (opts.json && result.truncated) {
-        failures.push(`${provider.name}: truncated at the token limit before valid JSON completed (retried with a larger budget, still truncated)`);
-        continue;
-      }
+
+      recordStat(provider.name, true, Date.now() - callStart, null, provider.model);
       return { ...result, provider: provider.name };
     } catch (err) {
-      failures.push(`${provider.name}: ${err instanceof Error ? err.message : String(err)}`);
+      const errReason = `${err instanceof Error ? err.message : String(err)}`;
+      recordStat(provider.name, false, Date.now() - callStart, errReason, provider.model);
+      failures.push(`${provider.name}: ${errReason}`);
     }
   }
 

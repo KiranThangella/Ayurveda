@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { ebooks } from '@/lib/data/ebooks';
+import { ebooks as initialStaticEbooks } from '@/lib/data/ebooks';
+import { fetchAllEbooks } from '@/lib/data/ebooks-remote';
+import type { Ebook } from '@/lib/types';
 import { EbookCard } from '@/components/ebook-card';
 import { categories } from '@/lib/data/categories';
 import { Search, Filter } from 'lucide-react';
@@ -12,15 +14,24 @@ type FilterLang = 'all' | 'en' | 'te';
 
 export default function EbooksPage() {
   const { t, lang, isTelugu } = useLanguage();
+  const [allEbooks, setAllEbooks] = useState<Ebook[]>(initialStaticEbooks);
   const [query, setQuery] = useState('');
   const [filterLang, setFilterLang] = useState<FilterLang>('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterPrice, setFilterPrice] = useState<'all' | 'free' | 'premium'>('all');
 
-  const filtered = ebooks.filter((eb) => {
+  useEffect(() => {
+    fetchAllEbooks().then((list) => {
+      if (list && list.length > 0) {
+        setAllEbooks(list);
+      }
+    });
+  }, []);
+
+  const filtered = allEbooks.filter((eb) => {
     if (query) {
       const q = query.toLowerCase();
-      const titleMatch = (eb.title.en + eb.title.te).toLowerCase().includes(q) || eb.title.te.includes(query);
+      const titleMatch = (eb.title.en + (eb.title.te || '')).toLowerCase().includes(q) || (eb.title.te && eb.title.te.includes(query));
       if (!titleMatch) return false;
     }
     if (filterLang !== 'all' && eb.language !== filterLang) return false;
@@ -113,7 +124,7 @@ export default function EbooksPage() {
           >
             {lang === 'te' ? 'అన్ని' : 'All'}
           </button>
-          {categories.filter((c) => ebooks.some((e) => e.category === c.slug)).map((cat) => (
+          {categories.filter((c) => allEbooks.some((e) => e.category === c.slug)).map((cat) => (
             <button
               key={cat.slug}
               onClick={() => setFilterCategory(cat.slug)}

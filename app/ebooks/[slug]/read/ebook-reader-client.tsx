@@ -5,18 +5,31 @@ import { notFound } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { getEbookBySlug } from '@/lib/data/ebooks';
+import { fetchEbookBySlug } from '@/lib/data/ebooks-remote';
+import type { Ebook } from '@/lib/types';
 import { Disclaimer } from '@/components/disclaimer';
-import { ArrowLeft, ArrowRight, List, Sun, Moon, Type, Bookmark, BookmarkCheck, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, List, Sun, Moon, Type, Bookmark, BookmarkCheck, X, Loader2 } from 'lucide-react';
 
 export default function EbookReaderClient({ slug }: { slug: string }) {
   const { t, lang, isTelugu } = useLanguage();
-  const ebook = getEbookBySlug(slug);
+  const [ebook, setEbook] = useState<Ebook | undefined | null>(() => getEbookBySlug(slug) || null);
+  const [loading, setLoading] = useState(!ebook);
 
   const [chapterIdx, setChapterIdx] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [fontSize, setFontSize] = useState(18);
   const [tocOpen, setTocOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (!ebook) {
+      setLoading(true);
+      fetchEbookBySlug(slug).then((res) => {
+        setEbook(res || undefined);
+        setLoading(false);
+      });
+    }
+  }, [slug, ebook]);
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(`bookmarks-${slug}`) : null;
@@ -31,12 +44,21 @@ export default function EbookReaderClient({ slug }: { slug: string }) {
     }
   }, [chapterIdx, slug]);
 
-  if (!ebook) return notFound();
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">{lang === 'te' ? 'పుస్తకం లోడ్ అవుతోంది...' : 'Loading ebook...'}</p>
+      </div>
+    );
+  }
 
-  const chapter = ebook.chapters[chapterIdx];
-  const title = ebook.title[lang] || ebook.title.en;
-  const chTitle = chapter.title[lang] || chapter.title.en;
-  const chContent = chapter.content[lang] || chapter.content.en;
+  if (!ebook || !ebook.chapters || ebook.chapters.length === 0) return notFound();
+
+  const chapter = ebook.chapters[chapterIdx] || ebook.chapters[0];
+  const title = (ebook.title && (ebook.title[lang] || ebook.title.en)) || '';
+  const chTitle = (chapter?.title && (chapter.title[lang] || chapter.title.en || (typeof chapter.title === 'string' ? chapter.title : ''))) || '';
+  const chContent = (chapter?.content && (chapter.content[lang] || chapter.content.en || (typeof chapter.content === 'string' ? chapter.content : ''))) || '';
   const progress = Math.round(((chapterIdx + 1) / ebook.chapters.length) * 100);
 
   const toggleBookmark = () => {
