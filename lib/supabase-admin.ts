@@ -12,9 +12,9 @@ let adminClient: SupabaseClient | null = null;
 export function getSupabaseAdmin(): SupabaseClient {
   if (!adminClient) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     if (!url || !serviceKey) {
-      throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for admin operations.');
+      throw new Error('Supabase URL and Key must be set for operations.');
     }
     adminClient = createClient(url, serviceKey, { auth: { persistSession: false } });
   }

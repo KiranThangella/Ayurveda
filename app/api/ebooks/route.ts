@@ -3,6 +3,8 @@ import { getServerPublishedEbooks, saveServerPublishedEbook } from '@/lib/server
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { Ebook } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);

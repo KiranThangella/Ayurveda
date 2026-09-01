@@ -11,6 +11,7 @@ interface PublishRequest {
   subtitle?: string;
   description?: string;
   price?: number;
+  coverImage?: string;
   chapters: Array<{
     chapterNumber: number;
     title: string;
@@ -30,7 +31,7 @@ function isValidUUID(str?: string): boolean {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as PublishRequest;
-    const { topicId, lang, title, subtitle, description, price = 0, chapters = [], jobId, ebookId } = body;
+    const { topicId, lang, title, subtitle, description, price = 0, coverImage, chapters = [], jobId, ebookId } = body;
 
     if (!chapters || chapters.length === 0) {
       return NextResponse.json({ error: 'No chapters provided to publish' }, { status: 400 });
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
       ? `${topicId}-${lang}`
       : `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ebook'}-${lang}`;
 
-    const coverImageUrl = 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940';
+    const coverImageUrl = coverImage || 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940';
 
     // Ensure valid UUID for Supabase primary key
     const resolvedEbookId = isValidUUID(ebookId) ? ebookId! : crypto.randomUUID();

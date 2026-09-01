@@ -578,6 +578,18 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
   const [publishing, setPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState<{ slug: string; title: string; url: string; supabaseSaved?: boolean; supabaseError?: string | null } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [coverImage, setCoverImage] = useState<string>('');
+
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
   // Partial chapter text kept between clicks when a chapter needs more than one
   // pass to finish (each click does exactly one Gemini call, so long chapters
   // need 2-3 "Continue" clicks instead of one long request) — keyed by outline
@@ -939,6 +951,7 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
         subtitle,
         description,
         price,
+        coverImage: coverImage || undefined,
         chapters: chapters.map((c) => ({
           chapterNumber: c.chapterNumber,
           title: c.title,
@@ -1500,6 +1513,33 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
 
           <Disclaimer variant="full" />
 
+          {/* Cover Image Upload */}
+          <div className="mt-6 p-4 rounded-xl border border-border/60 bg-card/50">
+            <label className={cn('block text-sm font-semibold mb-2', genLang === 'te' && 'font-telugu')}>
+              {lang === 'te' ? 'కవర్ ఇమేజ్ ఎంచుకోండి (ఆప్షనల్)' : 'Set Cover Image (Optional)'}
+            </label>
+            <div className="flex items-center gap-4">
+              {coverImage && (
+                <div className="h-16 w-12 rounded overflow-hidden shrink-0 shadow-sm border border-border/50">
+                  <img src={coverImage} alt="Cover preview" className="h-full w-full object-cover" />
+                </div>
+              )}
+              <div className="flex-1">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverUpload}
+                  className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 transition-colors"
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {lang === 'te'
+                    ? 'ఎంచుకోకపోతే డిఫాల్ట్ ఆయుర్వేద ఇమేజ్ వాడబడుతుంది.'
+                    : 'If empty, a default Ayurvedic nature image will be used.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Action buttons & Publish */}
           <div className="mt-6 flex flex-wrap gap-3 items-center">
             <button onClick={() => { setGenerated(false); setStep(0); setChapters([]); setBookMeta(null); setPublishSuccess(null); }} className={cn('inline-flex items-center gap-2 rounded-lg border border-border/60 px-4 py-2.5 text-sm font-medium hover:bg-muted/60', isTelugu && 'font-telugu')}>
@@ -1714,6 +1754,16 @@ function HerbsSection({ lang, isTelugu, accessToken }: { lang: 'en' | 'te'; isTe
 /* ───────────── Ebooks Tab ───────────── */
 
 function EbooksTab({ lang, isTelugu, t }: { lang: 'en' | 'te'; isTelugu: boolean; t: (k: string) => string }) {
+  const [allEbooks, setAllEbooks] = useState<Ebook[]>(ebooks);
+  
+  useEffect(() => {
+    fetchAllEbooks().then((list) => {
+      if (list && list.length > 0) {
+        setAllEbooks(list);
+      }
+    });
+  }, []);
+
   const coverImages = [FOREST_IMG, TEA_IMG, RAIN_LEAVES_IMG, LEAVES_IMG, MOUNTAIN_IMG, FOREST_IMG, TEA_IMG, RAIN_LEAVES_IMG];
   return (
     <div className="animate-fade-in">
@@ -1721,13 +1771,13 @@ function EbooksTab({ lang, isTelugu, t }: { lang: 'en' | 'te'; isTelugu: boolean
         <h2 className={cn('text-lg font-bold', isTelugu && 'font-telugu')}>
           {lang === 'te' ? 'పుస్తకాల జాబితా' : 'Ebook Library'}
         </h2>
-        <span className="text-xs text-muted-foreground">{ebooks.length} {lang === 'te' ? 'పుస్తకాలు' : 'ebooks'}</span>
+        <span className="text-xs text-muted-foreground">{allEbooks.length} {lang === 'te' ? 'పుస్తకాలు' : 'ebooks'}</span>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {ebooks.map((eb, i) => (
+        {allEbooks.map((eb, i) => (
           <div key={eb.slug} className="rounded-xl border border-border/60 bg-card overflow-hidden shadow-soft hover:shadow-card transition-all group">
             <div className="relative h-32 overflow-hidden">
-              <img src={coverImages[i % coverImages.length]} alt={eb.title.en} className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <img src={eb.coverImage || coverImages[i % coverImages.length]} alt={eb.title.en} className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
               <div className="absolute bottom-2 left-3 right-3">
                 <p className={cn('text-sm font-bold text-white truncate', isTelugu && lang === 'te' && 'font-telugu')}>{eb.title[lang] || eb.title.en}</p>
@@ -1736,7 +1786,7 @@ function EbooksTab({ lang, isTelugu, t }: { lang: 'en' | 'te'; isTelugu: boolean
               {!eb.isFree && <span className="absolute top-2 right-2 rounded-full bg-gold/90 px-2 py-0.5 text-[10px] font-bold text-white">₹{eb.price}</span>}
             </div>
             <div className="p-3">
-              <p className="text-xs text-muted-foreground mb-2">{eb.chapters.length} {t('ebook.chapters')} • {eb.readingTime} min</p>
+              <p className="text-xs text-muted-foreground mb-2">{eb.chapters?.length || 0} {t('ebook.chapters')} • {eb.readingTime} min</p>
               <div className="flex items-center gap-2">
                 <span className={cn('text-xs font-medium', eb.featured ? 'text-primary' : 'text-muted-foreground')}>{eb.rating}★</span>
                 <span className="text-xs text-muted-foreground">({eb.reviewCount})</span>
