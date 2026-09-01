@@ -49,12 +49,27 @@ export async function fetchAllEbooks(): Promise<Ebook[]> {
       const { data, error } = await supabase
         .from('ebooks')
         .select('*')
-        .eq('generation_status', 'ready')
+        .in('generation_status', ['ready', 'complete', 'published', 'outline_pending', 'chapters_pending'])
         .order('created_at', { ascending: false });
 
       if (!error && Array.isArray(data)) {
         for (const row of data) {
-          const chapters = Array.isArray(row.chapters) ? row.chapters : [];
+          let chapters = Array.isArray(row.chapters) ? row.chapters : [];
+
+          // If chapters json is empty, try fetching from ebook_chapters table
+          if (chapters.length === 0 && row.id) {
+            try {
+              const { data: chData } = await supabase
+                .from('ebook_chapters')
+                .select('*')
+                .eq('ebook_id', row.id)
+                .order('chapter_number', { ascending: true });
+              if (chData && chData.length > 0) {
+                chapters = chData;
+              }
+            } catch {}
+          }
+
           const ebook: Ebook = {
             id: row.id || row.slug,
             slug: row.slug,
@@ -75,7 +90,7 @@ export async function fetchAllEbooks(): Promise<Ebook[]> {
             language: row.language || 'en',
             category: row.category || 'general',
             coverQuery: row.topic_id || row.title || 'Ayurveda',
-            coverImage: row.cover_image_url || 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
+            coverImage: row.cover_image_url || row.cover_url || 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
             rating: 5,
             reviewCount: 1,
             readingTime: Math.max(10, Math.round((row.total_words || 3000) / 150)),

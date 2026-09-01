@@ -576,7 +576,7 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
   const [batchExpandCurrent, setBatchExpandCurrent] = useState(0);
   const [expandSuccessInfo, setExpandSuccessInfo] = useState<{ chapterIdx: number; wordsAdded: number; mode: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
-  const [publishSuccess, setPublishSuccess] = useState<{ slug: string; title: string; url: string } | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState<{ slug: string; title: string; url: string; supabaseSaved?: boolean; supabaseError?: string | null } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   // Partial chapter text kept between clicks when a chapter needs more than one
   // pass to finish (each click does exactly one Gemini call, so long chapters
@@ -930,6 +930,8 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
         ebookId: string;
         slug: string;
         ebook: Ebook;
+        supabaseSaved?: boolean;
+        supabaseError?: string | null;
       }>('/api/admin/ebook/publish', {
         topicId: selectedTopic.id,
         lang: genLang,
@@ -957,6 +959,8 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
           slug: finalSlug,
           title: res.ebook?.title?.[genLang] || res.ebook?.title?.en || title,
           url: `/ebooks/${finalSlug}`,
+          supabaseSaved: res.supabaseSaved,
+          supabaseError: res.supabaseError,
         });
       }
     } catch (err) {
@@ -1533,11 +1537,33 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
                   <h4 className={cn('text-lg font-bold text-foreground mb-1', genLang === 'te' && 'font-telugu')}>
                     {publishSuccess.title}
                   </h4>
-                  <p className={cn('text-xs text-muted-foreground mb-4', isTelugu && 'font-telugu')}>
+                  <p className={cn('text-xs text-muted-foreground mb-3', isTelugu && 'font-telugu')}>
                     {lang === 'te'
                       ? 'ఈ పుస్తకం ఇప్పుడు మీ ఆన్‌లైన్ స్టోర్ మరియు ఈబుక్ లైబ్రరీలో లైవ్ గా అందుబాటులో ఉంది. పాఠకులు దీన్ని వెంటనే చదవగలరు!'
                       : 'This ebook is now live in your store and library. Readers can start reading immediately!'}
                   </p>
+
+                  {/* Supabase Status Indicator */}
+                  <div className="mb-4">
+                    {publishSuccess.supabaseSaved ? (
+                      <div className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>{lang === 'te' ? 'క్లౌడ్ డేటాబేస్ (Supabase) లో విజయవంతంగా సేవ్ చేయబడింది' : 'Synced & Saved to Supabase Cloud Database'}</span>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                        <div className="flex items-center gap-1.5 font-semibold">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                          <span>{lang === 'te' ? 'స్థానిక బ్రౌజర్ (LocalStorage) లో మాత్రమే భద్రపరచబడింది' : 'Saved to Local Browser Storage Only'}</span>
+                        </div>
+                        <p className="text-[11px] opacity-90">
+                          {publishSuccess.supabaseError
+                            ? `${lang === 'te' ? 'Supabase లో సేవ్ అవ్వలేదు కారణం:' : 'Could not save to Supabase:'} ${publishSuccess.supabaseError}`
+                            : (lang === 'te' ? 'Supabase ఎన్విరాన్‌మెంట్ వేరియబుల్స్ (URL & SERVICE_ROLE_KEY) సెట్టింగ్స్‌లో కాన్ఫిగర్ చేయలేదు.' : 'Supabase environment variables (URL & SERVICE_ROLE_KEY) are not configured in Settings.')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex flex-wrap gap-2.5">
                     <a

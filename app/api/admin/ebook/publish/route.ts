@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { CURRICULUM } from '@/lib/data/curriculum';
 import type { Ebook } from '@/lib/types';
+import crypto from 'crypto';
 
 interface PublishRequest {
   topicId: string;
@@ -19,6 +20,11 @@ interface PublishRequest {
   }>;
   jobId?: string;
   ebookId?: string;
+}
+
+function isValidUUID(str?: string): boolean {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 }
 
 export async function POST(req: NextRequest) {
@@ -40,8 +46,11 @@ export async function POST(req: NextRequest) {
 
     const coverImageUrl = 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940';
 
+    // Ensure valid UUID for Supabase primary key
+    const resolvedEbookId = isValidUUID(ebookId) ? ebookId! : crypto.randomUUID();
+
     const ebookObject: Ebook = {
-      id: ebookId || `eb-${Date.now()}`,
+      id: resolvedEbookId,
       slug,
       title: {
         en: lang === 'te' ? (topic?.titleEn || title) : title,
@@ -86,43 +95,80 @@ export async function POST(req: NextRequest) {
       })),
     };
 
-    // Try saving to Supabase if configured
+    let supabaseSaved = false;
+    let supabaseError: string | null = null;
+
+    // Try saving to Supabase if credentials are provided
     try {
       const adminClient = getSupabaseAdmin();
       if (adminClient) {
-        // Upsert into ebooks table
-        const { error: upsertError } = await adminClient.from('ebooks').upsert({
-          id: ebookObject.id,
-          slug,
-          topic_id: topicId,
-          language: lang,
-          title: lang === 'te' ? ebookObject.title.te : ebookObject.title.en,
-          subtitle: lang === 'te' ? ebookObject.subtitle.te : ebookObject.subtitle.en,
-          description: lang === 'te' ? ebookObject.description.te : ebookObject.description.en,
-          price_inr: price,
-          category,
-          cover_image_url: coverImageUrl,
-          total_words: totalWords,
-          chapter_count: chapters.length,
-          chapters: chapters,
-          generation_status: 'ready',
-          updated_at: new Date().toISOString(),
-        });
+        // 1. Upsert into ebooks table
+        const { data: upsertData, error: upsertError } = await adminClient.from('ebooks').upsert(
+          {
+            id: resolvedEbookId,
+            slug,
+            topic_id: topicId || null,
+            language: lang,
+            title: lang === 'te' ? ebookObject.title.te : ebookObject.title.en,
+            subtitle: lang === 'te' ? ebookObject.subtitle.te : ebookObject.subtitle.en,
+            description: lang === 'te' ? ebookObject.description.te : ebookObject.description.en,
+            price: price,
+            price_inr: price,
+            is_free: price === 0,
+            is_premium: price > 0,
+            category,
+            cover_query: topic?.titleEn || title,
+            cover_url: coverImageUrl,
+            cover_image_url: coverImageUrl,
+            total_words: totalWords,
+            chapter_count: chapters.length,
+            chapters: chapters,
+            generation_status: 'complete',
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'slug' }
+        ).select().maybeSingle();
 
         if (upsertError) {
-          console.warn('Supabase ebook upsert warning (will still return success):', upsertError);
+          console.warn('Supabase ebook upsert warning:', upsertError);
+          supabaseError = upsertError.message;
+        } else {
+          supabaseSaved = true;
+          const finalDbEbookId = upsertData?.id || resolvedEbookId;
+
+          // 2. Also insert/upsert each chapter into ebook_chapters table if it exists
+          try {
+            const chapterRows = chapters.map((ch, idx) => ({
+              ebook_id: finalDbEbookId,
+              chapter_number: ch.chapterNumber || idx + 1,
+              title: ch.title,
+              content: ch.content,
+              summary: ch.summary || '',
+              word_count: ch.wordCount || 0,
+            }));
+
+            await adminClient.from('ebook_chapters').upsert(
+              chapterRows,
+              { onConflict: 'ebook_id,chapter_number' }
+            );
+          } catch (chErr) {
+            console.warn('Optional ebook_chapters upsert info:', chErr);
+          }
         }
 
-        // If a jobId was provided, mark it done
+        // If a jobId was provided and it exists, mark it completed
         if (jobId) {
-          await adminClient.from('generation_jobs').update({
-            status: 'completed',
-            updated_at: new Date().toISOString(),
-          }).eq('id', jobId);
+          try {
+            await adminClient.from('generation_jobs').update({
+              status: 'complete',
+              updated_at: new Date().toISOString(),
+            }).eq('id', jobId);
+          } catch {}
         }
       }
-    } catch (dbErr) {
-      console.warn('Supabase publish exception handled gracefully:', dbErr);
+    } catch (dbErr: any) {
+      console.warn('Supabase publish exception handled:', dbErr);
+      supabaseError = dbErr?.message || 'Supabase credentials not configured or database unreachable.';
     }
 
     return NextResponse.json({
@@ -131,6 +177,8 @@ export async function POST(req: NextRequest) {
       ebookId: ebookObject.id,
       ebook: ebookObject,
       url: `/ebooks/${slug}`,
+      supabaseSaved,
+      supabaseError,
     });
   } catch (error) {
     console.error('Publish error:', error);
