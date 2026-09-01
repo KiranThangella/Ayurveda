@@ -95,8 +95,18 @@ export async function POST(req: NextRequest) {
       })),
     };
 
+    let serverSaved = false;
     let supabaseSaved = false;
     let supabaseError: string | null = null;
+    
+    // Save to local server file system as a fallback
+    try {
+      const { saveServerPublishedEbook } = await import('@/lib/server/ebooks-store');
+      saveServerPublishedEbook(ebookObject);
+      serverSaved = true;
+    } catch (fsErr) {
+      console.warn('Failed to save to server FS', fsErr);
+    }
 
     // Try saving to Supabase if credentials are provided
     try {

@@ -1,6 +1,8 @@
 import type { Ebook } from '../types';
+import { panchamahabhutaTridoshaEbook } from './books/panchamahabhuta-tridosha';
 
 export const ebooks: Ebook[] = [
+  panchamahabhutaTridoshaEbook,
   {
     slug: 'ayurveda-for-beginners',
     title: {
