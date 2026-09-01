@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getSupabaseAdmin, upsertWithSchemaFallback } from '@/lib/supabase-admin';
 import { CURRICULUM } from '@/lib/data/curriculum';
 import type { Ebook } from '@/lib/types';
 import crypto from 'crypto';
@@ -113,32 +113,35 @@ export async function POST(req: NextRequest) {
     try {
       const adminClient = getSupabaseAdmin();
       if (adminClient) {
-        // 1. Upsert into ebooks table
-        const { data: upsertData, error: upsertError } = await adminClient.from('ebooks').upsert(
-          {
-            id: resolvedEbookId,
-            slug,
-            topic_id: topicId || null,
-            language: lang,
-            title: lang === 'te' ? ebookObject.title.te : ebookObject.title.en,
-            subtitle: lang === 'te' ? ebookObject.subtitle.te : ebookObject.subtitle.en,
-            description: lang === 'te' ? ebookObject.description.te : ebookObject.description.en,
-            price: price,
-            price_inr: price,
-            is_free: price === 0,
-            is_premium: price > 0,
-            category,
-            cover_query: topic?.titleEn || title,
-            cover_url: coverImageUrl,
-            cover_image_url: coverImageUrl,
-            total_words: totalWords,
-            chapter_count: chapters.length,
-            chapters: chapters,
-            generation_status: 'complete',
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'slug' }
-        ).select().maybeSingle();
+        // 1. Upsert into ebooks table with automatic missing-column fallback
+        const ebookData: Record<string, any> = {
+          id: resolvedEbookId,
+          slug,
+          topic_id: topicId || null,
+          language: lang,
+          title: lang === 'te' ? ebookObject.title.te : ebookObject.title.en,
+          subtitle: lang === 'te' ? ebookObject.subtitle.te : ebookObject.subtitle.en,
+          description: lang === 'te' ? ebookObject.description.te : ebookObject.description.en,
+          price: price,
+          price_inr: price,
+          is_free: price === 0,
+          is_premium: price > 0,
+          category,
+          cover_query: topic?.titleEn || title,
+          cover_url: coverImageUrl,
+          cover_image_url: coverImageUrl,
+          total_words: totalWords,
+          chapter_count: chapters.length,
+          generation_status: 'complete',
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data: upsertData, error: upsertError } = await upsertWithSchemaFallback(
+          adminClient,
+          'ebooks',
+          ebookData,
+          'slug'
+        );
 
         if (upsertError) {
           console.warn('Supabase ebook upsert warning:', upsertError);
@@ -147,7 +150,7 @@ export async function POST(req: NextRequest) {
           supabaseSaved = true;
           const finalDbEbookId = upsertData?.id || resolvedEbookId;
 
-          // 2. Also insert/upsert each chapter into ebook_chapters table if it exists
+          // 2. Also insert/upsert each chapter into ebook_chapters table safely
           try {
             const chapterRows = chapters.map((ch, idx) => ({
               ebook_id: finalDbEbookId,
@@ -158,10 +161,14 @@ export async function POST(req: NextRequest) {
               word_count: ch.wordCount || 0,
             }));
 
-            await adminClient.from('ebook_chapters').upsert(
-              chapterRows,
-              { onConflict: 'ebook_id,chapter_number' }
-            );
+            for (const chRow of chapterRows) {
+              await upsertWithSchemaFallback(
+                adminClient,
+                'ebook_chapters',
+                chRow,
+                'ebook_id,chapter_number'
+              );
+            }
           } catch (chErr) {
             console.warn('Optional ebook_chapters upsert info:', chErr);
           }

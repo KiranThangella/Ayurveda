@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateJSON, GeminiError } from '@/lib/ai/gemini';
 import { buildOutlinePrompt, type OutlineChapter } from '@/lib/ai/prompts';
 import { getTopicById } from '@/lib/data/curriculum';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getSupabaseAdmin, insertWithSchemaFallback } from '@/lib/supabase-admin';
 import { assertAdmin } from '@/lib/auth-server';
 import type { GenLang } from '@/lib/ebook-generator';
 
@@ -50,25 +50,25 @@ export async function POST(req: NextRequest) {
     let job = existingJob;
 
     if (!job) {
-      const { data: ebook, error: ebookErr } = await supabase
-        .from('ebooks')
-        .insert({
+      const { data: ebook, error: ebookErr } = await insertWithSchemaFallback(
+        supabase,
+        'ebooks',
+        {
           slug: `${topicId}-${lang}-${Date.now()}`,
           topic_id: topicId,
           language: lang,
           title: topic.titleEn,
           generation_status: 'outline',
           is_free: true,
-        })
-        .select()
-        .single();
+        }
+      );
       if (ebookErr) throw ebookErr;
 
-      const { data: newJob, error: jobErr } = await supabase
-        .from('generation_jobs')
-        .insert({ topic_id: topicId, language: lang, ebook_id: ebook.id, status: 'outline_pending', chapters_done: 0 })
-        .select()
-        .single();
+      const { data: newJob, error: jobErr } = await insertWithSchemaFallback(
+        supabase,
+        'generation_jobs',
+        { topic_id: topicId, language: lang, ebook_id: ebook.id || ebook.slug, status: 'outline_pending', chapters_done: 0 }
+      );
       if (jobErr) throw jobErr;
       job = newJob;
     }

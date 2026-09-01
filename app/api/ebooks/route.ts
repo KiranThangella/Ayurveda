@@ -31,7 +31,15 @@ export async function GET(req: NextRequest) {
           query = query.eq('slug', slug);
         }
 
-        const { data, error } = await query;
+        let { data, error } = await query;
+        if (error) {
+          let fallbackQuery = supabase.from('ebooks').select('*');
+          if (slug) fallbackQuery = fallbackQuery.eq('slug', slug);
+          const fallbackRes = await fallbackQuery;
+          data = fallbackRes.data;
+          error = fallbackRes.error;
+        }
+
         if (!error && Array.isArray(data)) {
           for (const row of data) {
             let chapters = Array.isArray(row.chapters) ? row.chapters : [];
