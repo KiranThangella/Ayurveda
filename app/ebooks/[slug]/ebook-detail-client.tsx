@@ -10,6 +10,7 @@ import { fetchEbookBySlug } from '@/lib/data/ebooks-remote';
 import type { Ebook } from '@/lib/types';
 import { categories } from '@/lib/data/categories';
 import { EbookCover } from '@/components/ebook-cover';
+import { Disclaimer } from '@/components/disclaimer';
 import { ShareButtons } from '@/components/share-buttons';
 import { EbookCard } from '@/components/ebook-card';
 import { PaymentModal, isEbookPurchased } from '@/components/payment-modal';
