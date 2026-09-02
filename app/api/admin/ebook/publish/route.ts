@@ -48,7 +48,24 @@ export async function POST(req: NextRequest) {
     const coverImageUrl = coverImage || 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940';
 
     // Ensure valid UUID for Supabase primary key
-    const resolvedEbookId = isValidUUID(ebookId) ? ebookId! : crypto.randomUUID();
+    let resolvedEbookId = isValidUUID(ebookId) ? ebookId! : crypto.randomUUID();
+
+    // Try finding existing record in Supabase to preserve ID
+    try {
+      const adminClient = getSupabaseAdmin();
+      if (adminClient) {
+        const { data: existingEbook } = await adminClient
+          .from('ebooks')
+          .select('id')
+          .eq('slug', slug)
+          .maybeSingle();
+        if (existingEbook?.id) {
+          resolvedEbookId = existingEbook.id;
+        }
+      }
+    } catch (e) {
+      // Ignore lookup failure, fallback to generated ID
+    }
 
     const ebookObject: Ebook = {
       id: resolvedEbookId,

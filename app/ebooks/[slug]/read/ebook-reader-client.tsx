@@ -8,7 +8,8 @@ import { getEbookBySlug } from '@/lib/data/ebooks';
 import { fetchEbookBySlug } from '@/lib/data/ebooks-remote';
 import type { Ebook } from '@/lib/types';
 import { Disclaimer } from '@/components/disclaimer';
-import { ArrowLeft, ArrowRight, List, Sun, Moon, Type, Bookmark, BookmarkCheck, X, Loader2 } from 'lucide-react';
+import { PaymentModal, isEbookPurchased } from '@/components/payment-modal';
+import { ArrowLeft, ArrowRight, List, Sun, Moon, Type, Bookmark, BookmarkCheck, X, Loader2, Lock, Sparkles } from 'lucide-react';
 
 export default function EbookReaderClient({ slug }: { slug: string }) {
   const { t, lang, isTelugu } = useLanguage();
@@ -20,6 +21,8 @@ export default function EbookReaderClient({ slug }: { slug: string }) {
   const [fontSize, setFontSize] = useState(18);
   const [tocOpen, setTocOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<number[]>([]);
+  const [purchased, setPurchased] = useState(false);
+  const [showPayModal, setShowPayModal] = useState(false);
 
   useEffect(() => {
     if (!ebook) {
@@ -27,7 +30,12 @@ export default function EbookReaderClient({ slug }: { slug: string }) {
       fetchEbookBySlug(slug).then((res) => {
         setEbook(res || undefined);
         setLoading(false);
+        if (res) {
+          setPurchased(isEbookPurchased(res.slug, res.isFree));
+        }
       });
+    } else {
+      setPurchased(isEbookPurchased(ebook.slug, ebook.isFree));
     }
   }, [slug, ebook]);
 
@@ -179,12 +187,39 @@ export default function EbookReaderClient({ slug }: { slug: string }) {
           {chTitle}
         </h1>
 
-        <div
-          className={cn('prose-content leading-relaxed text-foreground/90 whitespace-pre-line', isTelugu && lang === 'te' && 'font-telugu')}
-          style={{ fontSize: `${fontSize}px`, lineHeight: 1.75 }}
-        >
-          {chContent}
-        </div>
+        {!ebook.isFree && !purchased && chapterIdx > 0 ? (
+          <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/5 via-card to-gold/5 p-8 text-center space-y-6 shadow-card my-8">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-soft">
+              <Lock className="h-7 w-7" />
+            </div>
+            <div className="max-w-md mx-auto space-y-2">
+              <h3 className={cn('text-xl font-bold text-foreground', isTelugu && 'font-telugu')}>
+                {lang === 'te' ? 'ఈ అధ్యాయం అన్‌లాక్ కావడానికి చెల్లింపు అవసరం' : 'Unlock Chapter & Complete Ebook'}
+              </h3>
+              <p className={cn('text-sm text-muted-foreground leading-relaxed', isTelugu && 'font-telugu')}>
+                {lang === 'te'
+                  ? 'ఈ పుస్తకంలో ఉన్న అన్ని లోతైన అధ్యాయాలు మరియు చికిత్సలను పూర్తి స్థాయిలో చదవడానికి ఒక్కసారి మాత్రమే ₹' + (ebook.price || 199) + ' చెల్లించండి.'
+                  : 'Get lifetime full access to all chapters, herbal formulations, and therapeutic guidance for just ₹' + (ebook.price || 199) + '.'}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPayModal(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3.5 text-base font-bold shadow-card transition-all hover:scale-[1.02]"
+            >
+              <Sparkles className="h-5 w-5" />
+              <span className={isTelugu ? 'font-telugu' : ''}>
+                {lang === 'te' ? `₹${ebook.price || 199} చెల్లించి అన్‌లాక్ చేయండి` : `Pay ₹${ebook.price || 199} & Unlock`}
+              </span>
+            </button>
+          </div>
+        ) : (
+          <div
+            className={cn('prose-content leading-relaxed text-foreground/90 whitespace-pre-line', isTelugu && lang === 'te' && 'font-telugu')}
+            style={{ fontSize: `${fontSize}px`, lineHeight: 1.75 }}
+          >
+            {chContent}
+          </div>
+        )}
 
         <Disclaimer variant="short" className="mt-8" />
 
@@ -203,19 +238,45 @@ export default function EbookReaderClient({ slug }: { slug: string }) {
             {t('ebook.prev')}
           </button>
           <button
-            onClick={() => setChapterIdx(Math.min(ebook.chapters.length - 1, chapterIdx + 1))}
-            disabled={chapterIdx === ebook.chapters.length - 1}
+            onClick={() => {
+              if (!ebook.isFree && !purchased && chapterIdx >= 0) {
+                setShowPayModal(true);
+              } else {
+                setChapterIdx(Math.min(ebook.chapters.length - 1, chapterIdx + 1));
+              }
+            }}
+            disabled={chapterIdx === ebook.chapters.length - 1 && (!ebook.isFree ? purchased : true)}
             className={cn(
               'flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors',
-              chapterIdx === ebook.chapters.length - 1 && 'opacity-40 cursor-not-allowed',
+              chapterIdx === ebook.chapters.length - 1 && purchased && 'opacity-40 cursor-not-allowed',
               isTelugu && 'font-telugu'
             )}
           >
-            {t('ebook.next')}
-            <ArrowRight className="h-4 w-4" />
+            {!ebook.isFree && !purchased && chapterIdx >= 0 ? (
+              <>
+                <Lock className="h-4 w-4" />
+                <span>{lang === 'te' ? 'అన్‌లాక్ చేయండి' : 'Unlock Full Book'}</span>
+              </>
+            ) : (
+              <>
+                {t('ebook.next')}
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
           </button>
         </div>
       </div>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        ebook={ebook}
+        isOpen={showPayModal}
+        onClose={() => setShowPayModal(false)}
+        onSuccess={() => {
+          setPurchased(true);
+          setShowPayModal(false);
+        }}
+      />
     </div>
   );
 }

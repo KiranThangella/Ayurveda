@@ -6,6 +6,7 @@ import { searchStockImage, buildImageQuery } from '@/lib/images/pexels';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { assertAdmin } from '@/lib/auth-server';
 import type { GenLang } from '@/lib/ebook-generator';
+import { cleanAndDeduplicateContent } from '@/lib/ai/text-cleaner';
 
 export const maxDuration = 60;
 
@@ -67,8 +68,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const content = combined.trim();
-    const wordCount = content.split(/\s+/).filter(Boolean).length;
+    const cleaned = cleanAndDeduplicateContent(combined);
+    const content = cleaned.content;
+    const wordCount = cleaned.wordCount;
 
     const { summary } = await generateJSON<{ summary: string }>(buildChapterSummaryPrompt(chapterPlan, content, lang), { temperature: 0.5, maxOutputTokens: 1500 });
 

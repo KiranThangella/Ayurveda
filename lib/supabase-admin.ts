@@ -52,6 +52,17 @@ export async function upsertWithSchemaFallback(
     lastError = error;
     const msg = error.message || error.details || error.hint || '';
     
+    if (
+      (msg.toLowerCase().includes('violates foreign key constraint') ||
+       msg.toLowerCase().includes('foreign key constraint')) &&
+      payload.hasOwnProperty('id')
+    ) {
+      console.warn(`[Supabase] FK constraint error on table '${tableName}' when setting 'id'. Removing 'id' from payload and retrying...`);
+      delete payload.id;
+      retries++;
+      continue;
+    }
+
     // Match missing column error patterns from Supabase / PostgREST
     const missingColMatch = 
       msg.match(/Could not find the '([^']+)' column/i) ||

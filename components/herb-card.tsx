@@ -14,8 +14,13 @@ interface HerbCardProps {
 
 export function HerbCard({ herb, className }: HerbCardProps) {
   const { lang, isTelugu } = useLanguage();
-  const name = lang === 'te' ? herb.teluguName : herb.commonName;
-  const intro = herb.introduction[lang] || herb.introduction.en;
+  if (!herb) return null;
+
+  const teluguName = herb.teluguName || herb.commonName || 'మూలిక';
+  const commonName = herb.commonName || herb.englishName || 'Herb';
+  const intro = herb.introduction
+    ? (herb.introduction[lang] || herb.introduction.en || herb.introduction.te || '')
+    : '';
   const imageUrl = getHerbImageUrl(herb);
 
   return (
@@ -30,7 +35,7 @@ export function HerbCard({ herb, className }: HerbCardProps) {
       <div className="relative aspect-[16/11] w-full bg-muted overflow-hidden">
         <img
           src={imageUrl}
-          alt={herb.commonName || herb.teluguName}
+          alt={commonName}
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
         />
@@ -44,17 +49,17 @@ export function HerbCard({ herb, className }: HerbCardProps) {
             {herb.sanskritName || 'Ayurvedic Herb'}
           </span>
           <span className="rounded-full bg-emerald-700/80 backdrop-blur-md px-2 py-0.5 text-[10px] font-medium text-emerald-50 uppercase tracking-wider">
-            {herb.category}
+            {herb.category || 'herbs'}
           </span>
         </div>
 
         {/* Bottom Image Overlay Text */}
         <div className="absolute bottom-2.5 left-3 right-3 text-white pointer-events-none">
           <p className={cn('text-lg font-bold leading-tight drop-shadow-md text-white group-hover:text-emerald-200 transition-colors', isTelugu && 'font-telugu')}>
-            {herb.teluguName}
+            {teluguName}
           </p>
           <p className="text-xs font-medium text-white/90 drop-shadow-sm flex items-center justify-between">
-            <span>{herb.englishName || herb.commonName}</span>
+            <span>{herb.englishName || commonName}</span>
           </p>
         </div>
       </div>
@@ -63,7 +68,7 @@ export function HerbCard({ herb, className }: HerbCardProps) {
       <div className="flex flex-1 flex-col p-3.5 sm:p-4 justify-between bg-card">
         <div>
           <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-serif italic mb-1.5 flex items-center gap-1">
-            <span>{herb.botanicalName}</span>
+            <span>{herb.botanicalName || ''}</span>
           </p>
           <p className={cn('text-xs text-muted-foreground line-clamp-2 leading-relaxed', isTelugu && lang === 'te' && 'font-telugu')}>
             {intro}
@@ -72,8 +77,8 @@ export function HerbCard({ herb, className }: HerbCardProps) {
 
         <div className="mt-3 pt-2.5 border-t border-border/40 flex items-center justify-between">
           <div className="flex flex-wrap gap-1">
-            {herb.regionalNames?.slice(0, 2).map((rn) => (
-              <span key={rn.language} className="rounded-md bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {(herb.regionalNames || []).slice(0, 2).map((rn, idx) => (
+              <span key={rn.language || idx} className="rounded-md bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                 {rn.language}: {rn.name}
               </span>
             ))}

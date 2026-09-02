@@ -9,15 +9,18 @@ import { getEbookBySlug, ebooks } from '@/lib/data/ebooks';
 import { fetchEbookBySlug } from '@/lib/data/ebooks-remote';
 import type { Ebook } from '@/lib/types';
 import { categories } from '@/lib/data/categories';
-import { Disclaimer } from '@/components/disclaimer';
+import { EbookCover } from '@/components/ebook-cover';
 import { ShareButtons } from '@/components/share-buttons';
 import { EbookCard } from '@/components/ebook-card';
-import { ArrowLeft, Clock, Star, BookOpen, CheckCircle, FileText, BookMarked, Loader2 } from 'lucide-react';
+import { PaymentModal, isEbookPurchased } from '@/components/payment-modal';
+import { ArrowLeft, Clock, Star, BookOpen, CheckCircle, FileText, BookMarked, Loader2, Lock, CheckCircle2 } from 'lucide-react';
 
 export default function EbookDetailClient({ slug }: { slug: string }) {
   const { t, lang, isTelugu } = useLanguage();
   const [ebook, setEbook] = useState<Ebook | undefined | null>(() => getEbookBySlug(slug) || null);
   const [loading, setLoading] = useState(!ebook);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [purchased, setPurchased] = useState(false);
 
   useEffect(() => {
     if (!ebook) {
@@ -25,7 +28,12 @@ export default function EbookDetailClient({ slug }: { slug: string }) {
       fetchEbookBySlug(slug).then((res) => {
         setEbook(res || undefined);
         setLoading(false);
+        if (res) {
+          setPurchased(isEbookPurchased(res.slug, res.isFree));
+        }
       });
+    } else {
+      setPurchased(isEbookPurchased(ebook.slug, ebook.isFree));
     }
   }, [slug, ebook]);
 
@@ -61,18 +69,20 @@ export default function EbookDetailClient({ slug }: { slug: string }) {
 
           <div className="grid sm:grid-cols-[200px_1fr] gap-8 items-start">
             {/* Cover */}
-            <div className="relative aspect-[3/4] rounded-xl border border-border/60 bg-gradient-to-br from-primary/10 via-accent/5 to-gold/10 shadow-card overflow-hidden">
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
-                <BookOpen className="h-10 w-10 text-primary/40 mb-3" />
-                <h2 className={cn('text-sm font-bold leading-snug text-foreground/80', isTelugu && lang === 'te' && 'font-telugu')}>
-                  {title}
-                </h2>
-              </div>
-              <div className="absolute top-2 left-2">
+            <div className="relative shadow-card overflow-hidden rounded-xl">
+              <EbookCover
+                title={title}
+                subtitle={subtitle}
+                topicId={ebook.category || ebook.slug}
+                coverImage={ebook.coverImage}
+                language={lang as 'en' | 'te'}
+                aspectRatio="aspect-[3/4]"
+              />
+              <div className="absolute top-2 left-2 z-20">
                 {ebook.isFree ? (
-                  <span className="rounded-full bg-accent/90 px-2 py-0.5 text-[10px] font-bold text-accent-foreground">{t('card.free')}</span>
+                  <span className="rounded-full bg-accent/90 px-2 py-0.5 text-[10px] font-bold text-accent-foreground shadow-sm">{t('card.free')}</span>
                 ) : (
-                  <span className="rounded-full bg-gold/90 px-2 py-0.5 text-[10px] font-bold text-gold-foreground">{t('card.premium')}</span>
+                  <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-slate-950 shadow-sm">{t('card.premium')}</span>
                 )}
               </div>
             </div>
@@ -123,7 +133,7 @@ export default function EbookDetailClient({ slug }: { slug: string }) {
               </p>
 
               {/* CTA */}
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-6 flex flex-wrap gap-3 items-center">
                 <Link
                   href={`/ebooks/${ebook.slug}/read`}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-card transition-all hover:shadow-glow hover:scale-[1.02]"
@@ -131,18 +141,41 @@ export default function EbookDetailClient({ slug }: { slug: string }) {
                   <BookOpen className="h-4 w-4" />
                   <span className={isTelugu ? 'font-telugu' : ''}>{t('card.startReading')}</span>
                 </Link>
-                {!ebook.isFree && (
-                  <button className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground shadow-soft transition-all hover:shadow-card">
+                {!ebook.isFree && !purchased && (
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 text-sm font-bold shadow-soft transition-all hover:shadow-card hover:scale-[1.02]"
+                  >
+                    <Lock className="h-4 w-4" />
                     <span className={isTelugu ? 'font-telugu' : ''}>
-                      {lang === 'te' ? `₹${ebook.price} కొనుగోలు` : `Buy for ₹${ebook.price}`}
+                      {lang === 'te' ? `₹${ebook.price} కొనుగోలు చేయండి (Buy)` : `Buy for ₹${ebook.price}`}
                     </span>
                   </button>
+                )}
+                {!ebook.isFree && purchased && (
+                  <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-2.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className={isTelugu ? 'font-telugu' : ''}>
+                      {lang === 'te' ? 'అన్‌లాక్ చేయబడింది (Purchased)' : 'Unlocked / Purchased'}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        ebook={ebook}
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        onSuccess={() => {
+          setPurchased(true);
+          setShowPaymentModal(false);
+        }}
+      />
 
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Table of contents */}

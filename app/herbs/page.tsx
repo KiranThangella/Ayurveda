@@ -23,12 +23,17 @@ export default function HerbsPage() {
   const filtered = herbs.filter((h) => {
     if (!query) return true;
     const q = query.toLowerCase();
+    const common = (h.commonName || '').toLowerCase();
+    const telugu = h.teluguName || '';
+    const sanskrit = (h.sanskritName || '').toLowerCase();
+    const botanical = (h.botanicalName || '').toLowerCase();
+    const regional = (h.regionalNames || []).some((rn) => (rn?.name || '').toLowerCase().includes(q));
     return (
-      h.commonName.toLowerCase().includes(q) ||
-      h.teluguName.includes(query) ||
-      h.sanskritName.toLowerCase().includes(q) ||
-      h.botanicalName.toLowerCase().includes(q) ||
-      h.regionalNames.some((rn) => rn.name.toLowerCase().includes(q))
+      common.includes(q) ||
+      telugu.includes(query) ||
+      sanskrit.includes(q) ||
+      botanical.includes(q) ||
+      regional
     );
   });
 

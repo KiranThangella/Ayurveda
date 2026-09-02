@@ -1,6 +1,6 @@
 import type { Herb } from '../types';
 
-export const herbs: Herb[] = [
+const coreHerbs: Herb[] = [
   {
     slug: 'turmeric',
     commonName: 'Turmeric',
@@ -567,6 +567,14 @@ export const herbs: Herb[] = [
     },
   },
 ];
+
+import { buildCatalogHerbs } from './herbs-catalog';
+const catalogHerbs = buildCatalogHerbs();
+const catalogFiltered = catalogHerbs.filter(
+  (c) => !coreHerbs.some((core) => core.slug === c.slug)
+);
+
+export const herbs: Herb[] = [...coreHerbs, ...catalogFiltered];
 
 export function getHerbBySlug(slug: string): Herb | undefined {
   return herbs.find((h) => h.slug === slug);

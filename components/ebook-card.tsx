@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useLanguage, type Language } from '@/lib/i18n';
+import { useLanguage } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Ebook } from '@/lib/types';
-import { Star, Clock, BookOpen, Sparkles } from 'lucide-react';
+import { Star, Clock } from 'lucide-react';
+import { EbookCover } from '@/components/ebook-cover';
 
 interface EbookCardProps {
   ebook: Ebook;
@@ -15,6 +16,7 @@ export function EbookCard({ ebook, className }: EbookCardProps) {
   const { lang, t, isTelugu } = useLanguage();
   const title = ebook.title[lang] || ebook.title.en;
   const desc = ebook.description[lang] || ebook.description.en;
+  const subtitle = ebook.subtitle?.[lang] || ebook.subtitle?.en;
 
   return (
     <Link
@@ -25,35 +27,25 @@ export function EbookCard({ ebook, className }: EbookCardProps) {
       )}
     >
       {/* Cover */}
-      <div className="relative aspect-[3/4] bg-gradient-to-br from-primary/10 via-accent/5 to-gold/10 overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center p-6">
-          <div className="text-center">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
-              <BookOpen className="h-5 w-5 text-primary" />
-            </div>
-            <h3 className={cn(
-              'text-sm font-bold leading-snug text-foreground/90 line-clamp-3',
-              isTelugu && lang === 'te' && 'font-telugu'
-            )}>
-              {title}
-            </h3>
-          </div>
-        </div>
+      <div className="relative overflow-hidden">
+        <EbookCover
+          title={title}
+          subtitle={subtitle}
+          topicId={ebook.category || ebook.slug}
+          coverImage={ebook.coverImage}
+          language={lang as 'en' | 'te'}
+          aspectRatio="aspect-[3/4]"
+        />
 
-        {/* Badges */}
-        <div className="absolute top-2 left-2 flex gap-1.5">
+        {/* Price Badges */}
+        <div className="absolute top-2 left-2 flex gap-1.5 z-20">
           {ebook.isFree ? (
-            <span className="rounded-full bg-accent/90 px-2 py-0.5 text-[10px] font-bold text-accent-foreground">
+            <span className="rounded-full bg-accent/90 px-2 py-0.5 text-[10px] font-bold text-accent-foreground shadow-sm">
               {t('card.free')}
             </span>
           ) : (
-            <span className="rounded-full bg-gold/90 px-2 py-0.5 text-[10px] font-bold text-gold-foreground">
+            <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-slate-950 shadow-sm">
               {t('card.premium')}
-            </span>
-          )}
-          {ebook.language === 'te' && (
-            <span className="rounded-full bg-primary/80 px-2 py-0.5 text-[10px] font-bold text-primary-foreground font-telugu">
-              తె
             </span>
           )}
         </div>

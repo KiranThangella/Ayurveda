@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n';
@@ -17,6 +19,7 @@ import {
   RefreshCw, Loader2, Leaf, Mountain, Image as ImageIcon,
   BookText, FileText as FileTextIcon, Download, X, ShieldCheck,
   Activity, Zap, CheckCircle2, ExternalLink, Copy, Layers, BookPlus,
+  Edit,
 } from 'lucide-react';
 import { PRICES, type GenLang } from '@/lib/ebook-generator';
 import { CURRICULUM, SERIES, TOTAL_CURRICULUM_STATS, type CurriculumTopic } from '@/lib/data/curriculum';
@@ -26,6 +29,8 @@ import { fetchAllEbooks, saveLocalPublishedEbook } from '@/lib/data/ebooks-remot
 import type { ChapterSummary, OutlineChapter, ChapterExpansionType } from '@/lib/ai/prompts';
 import type { Ebook } from '@/lib/types';
 import { ApiHealthTab } from '@/components/admin/api-health-tab';
+import { EbookEditModal } from '@/components/admin/ebook-edit-modal';
+import { EbookCover } from '@/components/ebook-cover';
 
 interface AiGeneratedChapter {
   chapterNumber: number;
@@ -598,6 +603,7 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
   const [genPhase, setGenPhase] = useState<'idle' | 'outline' | 'chapters' | 'meta' | 'done'>('idle');
   const [genError, setGenError] = useState<string | null>(null);
   const [bookMeta, setBookMeta] = useState<{ title: string; subtitle: string; description: string } | null>(null);
+  const [genEditModalOpen, setGenEditModalOpen] = useState(false);
 
   // Every outline/chapter is saved to Supabase (ebooks/ebook_chapters/generation_jobs)
   // the instant it's generated — jobId/ebookId are what let a refreshed page, or a
@@ -1549,6 +1555,13 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
               <Download className="h-4 w-4" /> {lang === 'te' ? 'డౌన్‌లోడ్ (Markdown)' : 'Download (Markdown)'}
             </button>
             <button
+              onClick={() => setGenEditModalOpen(true)}
+              className={cn('inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 text-sm font-bold shadow-soft transition-all', isTelugu && 'font-telugu')}
+            >
+              <Edit className="h-4 w-4" />
+              <span>{lang === 'te' ? 'పుస్తకం సవరించు (Edit)' : 'Edit Completed Ebook'}</span>
+            </button>
+            <button
               onClick={publishBook}
               disabled={publishing}
               className={cn(
@@ -1562,6 +1575,50 @@ function GenerateTab({ lang, isTelugu, t, accessToken }: { lang: 'en' | 'te'; is
                 : (lang === 'te' ? 'ఇప్పుడే ప్రచురించు (Publish)' : 'Publish Ebook Now')}
             </button>
           </div>
+
+          {/* Edit Ebook Modal for generated book */}
+          {genEditModalOpen && (
+            <EbookEditModal
+              ebook={{
+                id: ebookId || `eb_${Date.now()}`,
+                slug: selectedTopic.id || 'generated-ebook',
+                title: { en: bookMeta?.title || selectedTopic.titleEn, te: bookMeta?.title || selectedTopic.titleTe },
+                subtitle: { en: bookMeta?.subtitle || '', te: bookMeta?.subtitle || '' },
+                description: { en: bookMeta?.description || '', te: bookMeta?.description || '' },
+                category: selectedTopic.series || 'general-wellness',
+                coverQuery: selectedTopic.titleEn,
+                coverImage: coverImage || 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
+                language: genLang,
+                readingTime: Math.ceil(totalWords / 200) || 15,
+                rating: 5,
+                reviewCount: 1,
+                isPremium: true,
+                isFree: false,
+                price: 199,
+                author: { en: 'MindWriter AI & Vaidya Team', te: 'మైండ్‌రైటర్ AI మరియు వైద్యల బృందం' },
+                chapters: chapters.map((ch, idx) => ({
+                  id: `ch_${idx + 1}`,
+                  title: { en: ch.title, te: ch.title },
+                  content: { en: ch.content, te: ch.content },
+                })),
+                tags: [selectedTopic.series, 'Ayurveda', 'Wellness'],
+                featured: true,
+                trending: true,
+                newRelease: true,
+              }}
+              isOpen={genEditModalOpen}
+              onClose={() => setGenEditModalOpen(false)}
+              onSaveSuccess={(updated) => {
+                setBookMeta({
+                  title: updated.title.te || updated.title.en,
+                  subtitle: updated.subtitle.te || updated.subtitle.en,
+                  description: updated.description.te || updated.description.en,
+                });
+                if (updated.coverImage) setCoverImage(updated.coverImage);
+                setGenEditModalOpen(false);
+              }}
+            />
+          )}
 
           {/* Publish Celebration Modal / Banner */}
           {publishSuccess && (
@@ -1755,48 +1812,111 @@ function HerbsSection({ lang, isTelugu, accessToken }: { lang: 'en' | 'te'; isTe
 
 function EbooksTab({ lang, isTelugu, t }: { lang: 'en' | 'te'; isTelugu: boolean; t: (k: string) => string }) {
   const [allEbooks, setAllEbooks] = useState<Ebook[]>(ebooks);
-  
-  useEffect(() => {
+  const [editingEbook, setEditingEbook] = useState<Ebook | null>(null);
+
+  const refreshList = () => {
     fetchAllEbooks().then((list) => {
       if (list && list.length > 0) {
         setAllEbooks(list);
       }
     });
+  };
+
+  useEffect(() => {
+    refreshList();
   }, []);
 
   const coverImages = [FOREST_IMG, TEA_IMG, RAIN_LEAVES_IMG, LEAVES_IMG, MOUNTAIN_IMG, FOREST_IMG, TEA_IMG, RAIN_LEAVES_IMG];
+
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-4">
-        <h2 className={cn('text-lg font-bold', isTelugu && 'font-telugu')}>
-          {lang === 'te' ? 'పుస్తకాల జాబితా' : 'Ebook Library'}
-        </h2>
+        <div>
+          <h2 className={cn('text-lg font-bold', isTelugu && 'font-telugu')}>
+            {lang === 'te' ? 'పూర్తయిన & ప్రచురించిన పుస్తకాలు (Completed Ebooks)' : 'Completed & Published Ebooks'}
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {lang === 'te' ? 'ఈబుక్‌ల పాఠ్యభాగం, శీర్షిక లేదా ధరను ఇక్కడ సవరించుకోవచ్చు' : 'Edit completed ebook titles, chapters, and pricing anytime'}
+          </p>
+        </div>
         <span className="text-xs text-muted-foreground">{allEbooks.length} {lang === 'te' ? 'పుస్తకాలు' : 'ebooks'}</span>
       </div>
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {allEbooks.map((eb, i) => (
-          <div key={eb.slug} className="rounded-xl border border-border/60 bg-card overflow-hidden shadow-soft hover:shadow-card transition-all group">
-            <div className="relative h-32 overflow-hidden">
-              <img src={eb.coverImage || coverImages[i % coverImages.length]} alt={eb.title.en} className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <div className="absolute bottom-2 left-3 right-3">
-                <p className={cn('text-sm font-bold text-white truncate', isTelugu && lang === 'te' && 'font-telugu')}>{eb.title[lang] || eb.title.en}</p>
+          <div key={eb.slug} className="rounded-xl border border-border/60 bg-card overflow-hidden shadow-soft hover:shadow-card transition-all group flex flex-col justify-between">
+            <div>
+              <div className="relative h-36 overflow-hidden">
+                <EbookCover
+                  title={eb.title ? (eb.title[lang] || eb.title.en) : eb.slug}
+                  subtitle={eb.subtitle?.[lang] || eb.subtitle?.en}
+                  topicId={eb.category || eb.slug}
+                  coverImage={eb.coverImage}
+                  language={lang as 'en' | 'te'}
+                  aspectRatio="h-full w-full"
+                  showMotto={false}
+                />
+                <div className="absolute top-2 right-2 flex items-center gap-1 z-20">
+                  <span className="rounded-full bg-emerald-600/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm font-sans">
+                    COMPLETED
+                  </span>
+                  {eb.isFree ? (
+                    <span className="rounded-full bg-accent/90 px-2 py-0.5 text-[10px] font-bold text-white">{t('card.free')}</span>
+                  ) : (
+                    <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-slate-950">₹{eb.price}</span>
+                  )}
+                </div>
               </div>
-              {eb.isFree && <span className="absolute top-2 right-2 rounded-full bg-accent/90 px-2 py-0.5 text-[10px] font-bold text-white">{t('card.free')}</span>}
-              {!eb.isFree && <span className="absolute top-2 right-2 rounded-full bg-gold/90 px-2 py-0.5 text-[10px] font-bold text-white">₹{eb.price}</span>}
+
+              <div className="p-3.5 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {eb.chapters?.length || 0} {t('ebook.chapters')} • {eb.readingTime || 10} min read
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className={cn('text-xs font-medium', eb.featured ? 'text-primary' : 'text-muted-foreground')}>{eb.rating || 5}★</span>
+                  <span className="text-xs text-muted-foreground">({eb.reviewCount || 12})</span>
+                  {eb.trending && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">Trending</span>}
+                  {eb.newRelease && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">New</span>}
+                </div>
+              </div>
             </div>
-            <div className="p-3">
-              <p className="text-xs text-muted-foreground mb-2">{eb.chapters?.length || 0} {t('ebook.chapters')} • {eb.readingTime} min</p>
-              <div className="flex items-center gap-2">
-                <span className={cn('text-xs font-medium', eb.featured ? 'text-primary' : 'text-muted-foreground')}>{eb.rating}★</span>
-                <span className="text-xs text-muted-foreground">({eb.reviewCount})</span>
-                {eb.trending && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">Trending</span>}
-                {eb.newRelease && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">New</span>}
-              </div>
+
+            <div className="p-3 border-t border-border/40 bg-muted/20 flex items-center justify-between gap-2">
+              <a
+                href={`/ebooks/${eb.slug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>{lang === 'te' ? 'చూడు (View)' : 'View Live'}</span>
+              </a>
+
+              <button
+                onClick={() => setEditingEbook(eb)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 text-xs font-bold shadow-soft transition-all"
+              >
+                <Edit className="h-3.5 w-3.5" />
+                <span className={isTelugu ? 'font-telugu' : ''}>
+                  {lang === 'te' ? 'సవరించు (Edit)' : 'Edit Ebook'}
+                </span>
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {editingEbook && (
+        <EbookEditModal
+          ebook={editingEbook}
+          isOpen={!!editingEbook}
+          onClose={() => setEditingEbook(null)}
+          onSaveSuccess={(updated) => {
+            setAllEbooks((prev) => prev.map((item) => (item.slug === updated.slug ? updated : item)));
+            refreshList();
+          }}
+        />
+      )}
     </div>
   );
 }

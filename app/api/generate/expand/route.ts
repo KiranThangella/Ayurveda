@@ -9,6 +9,7 @@ import {
 import { getTopicById, CURRICULUM } from '@/lib/data/curriculum';
 import { countWords } from '@/lib/ebook-generator';
 import type { GenLang } from '@/lib/ebook-generator';
+import { cleanAndDeduplicateContent } from '@/lib/ai/text-cleaner';
 
 interface ExpandRequest {
   topicId: string;
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest) {
     } else {
       finalContent = newAddition;
     }
+
+    const cleaned = cleanAndDeduplicateContent(finalContent);
+    finalContent = cleaned.content;
 
     const wordCount = countWords(finalContent);
     const wordsAdded = countWords(newAddition);

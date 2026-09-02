@@ -1,3 +1,5 @@
+import { cleanAndDeduplicateContent } from '@/lib/ai/text-cleaner';
+
 export type GenLang = 'en' | 'te';
 
 export interface GeneratedChapter {
@@ -405,9 +407,16 @@ export function generateChapter(
   audienceIdx: number,
   styleIdx: number,
 ): GeneratedChapter {
-  return lang === 'te'
+  const chapter = lang === 'te'
     ? buildChapterTe(chNum, totalChapters, topicIdx, audienceIdx, styleIdx)
     : buildChapterEn(chNum, totalChapters, topicIdx, audienceIdx, styleIdx);
+
+  const cleaned = cleanAndDeduplicateContent(chapter.content);
+  return {
+    title: chapter.title,
+    content: cleaned.content,
+    wordCount: cleaned.wordCount,
+  };
 }
 
 export function buildBookMeta(
