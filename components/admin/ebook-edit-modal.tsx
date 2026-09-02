@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Ebook, EbookChapter } from '@/lib/types';
@@ -29,15 +29,17 @@ import {
 } from 'lucide-react';
 
 const EBOOK_COVER_PRESETS = [
+  { name: 'Ayurveda Book', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80' },
   { name: 'Forest & Leaves', url: 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
   { name: 'Herbal Tea & Spices', url: 'https://images.pexels.com/photos/1417945/pexels-photo-1417945.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+  { name: 'Healing Spices', url: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1200&q=80' },
+  { name: 'Turmeric Roots', url: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=1200&q=80' },
+  { name: 'Sprout & Nature', url: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1200&q=80' },
   { name: 'Rain Leaves', url: 'https://images.pexels.com/photos/7002970/pexels-photo-7002970.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
   { name: 'Mountain Forest', url: 'https://images.pexels.com/photos/167699/pexels-photo-167699.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
-  { name: 'Turmeric Roots', url: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=1200&q=80' },
-  { name: 'Ancient Book', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80' },
-  { name: 'Healing Spices', url: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1200&q=80' },
-  { name: 'Sprout & Nature', url: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1200&q=80' },
 ];
+
+const QUICK_SEARCH_TAGS = ['Ayurveda Book', 'Herbal Medicine', 'Medicinal Plants', 'Spices', 'Organic Healing', 'Yoga'];
 
 interface EbookEditModalProps {
   ebook: Ebook;
@@ -63,11 +65,79 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
   const [coverImage, setCoverImage] = useState(ebook.coverImage || '');
   const [status, setStatus] = useState<'completed' | 'published' | 'draft'>('completed');
 
-  // Cover Image Extra States
+  // Cover Image Extra Controls State
   const [coverImageInput, setCoverImageInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState(ebook.title?.en || 'ayurveda book');
+  const [searchQuery, setSearchQuery] = useState(ebook.title?.en || ebook.title?.te || 'ayurveda book');
   const [isSearching, setIsSearching] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Sync state when ebook prop or isOpen changes
+  useEffect(() => {
+    if (isOpen && ebook) {
+      setTitleEn(ebook.title?.en || '');
+      setTitleTe(ebook.title?.te || '');
+      setSubtitleEn(ebook.subtitle?.en || '');
+      setSubtitleTe(ebook.subtitle?.te || '');
+      setDescEn(ebook.description?.en || '');
+      setDescTe(ebook.description?.te || '');
+      setPrice(ebook.price || 0);
+      setIsFree(ebook.isFree ?? false);
+      setCategory(ebook.category || 'general-wellness');
+      setCoverImage(typeof ebook.coverImage === 'string' ? ebook.coverImage : '');
+      setSearchQuery(ebook.title?.en || ebook.title?.te || 'ayurveda book');
+      if (ebook.chapters && ebook.chapters.length > 0) {
+        setChapters(
+          ebook.chapters.map((ch, idx) => ({
+            id: ch.id || `ch_${idx + 1}`,
+            title: {
+              en: typeof ch.title === 'string' ? ch.title : ch.title?.en || '',
+              te: typeof ch.title === 'string' ? ch.title : ch.title?.te || '',
+            },
+            content: {
+              en: typeof ch.content === 'string' ? ch.content : ch.content?.en || '',
+              te: typeof ch.content === 'string' ? ch.content : ch.content?.te || '',
+            },
+          }))
+        );
+      }
+    }
+  }, [ebook, isOpen]);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Chapters list state
+  const [chapters, setChapters] = useState<EbookChapter[]>(() => {
+    return (ebook.chapters || []).map((ch, idx) => ({
+      id: ch.id || `ch_${idx + 1}`,
+      title: {
+        en: typeof ch.title === 'string' ? ch.title : ch.title?.en || '',
+        te: typeof ch.title === 'string' ? ch.title : ch.title?.te || '',
+      },
+      content: {
+        en: typeof ch.content === 'string' ? ch.content : ch.content?.en || '',
+        te: typeof ch.content === 'string' ? ch.content : ch.content?.te || '',
+      },
+    }));
+  });
+
+  const [activeChapterIdx, setActiveChapterIdx] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const currentChapter = chapters[activeChapterIdx] || chapters[0];
 
   // File Upload with canvas compression
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,13 +197,14 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
     }
   };
 
-  const handleStockSearch = async () => {
-    if (!searchQuery.trim()) return;
+  const handleStockSearch = async (queryToSearch?: string) => {
+    const term = queryToSearch || searchQuery;
+    if (!term.trim()) return;
     setIsSearching(true);
     setUploadError(null);
     try {
       const token = await getFreshAccessToken();
-      const res = await fetch(`/api/admin/search-image?q=${encodeURIComponent(searchQuery)}`, {
+      const res = await fetch(`/api/admin/search-image?q=${encodeURIComponent(term)}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -156,30 +227,6 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
       setIsSearching(false);
     }
   };
-
-  // Chapters list state
-  const [chapters, setChapters] = useState<EbookChapter[]>(() => {
-    return (ebook.chapters || []).map((ch, idx) => ({
-      id: ch.id || `ch_${idx + 1}`,
-      title: {
-        en: typeof ch.title === 'string' ? ch.title : ch.title?.en || '',
-        te: typeof ch.title === 'string' ? ch.title : ch.title?.te || '',
-      },
-      content: {
-        en: typeof ch.content === 'string' ? ch.content : ch.content?.en || '',
-        te: typeof ch.content === 'string' ? ch.content : ch.content?.te || '',
-      },
-    }));
-  });
-
-  const [activeChapterIdx, setActiveChapterIdx] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  if (!isOpen) return null;
-
-  const currentChapter = chapters[activeChapterIdx] || chapters[0];
 
   const handleUpdateChapter = (field: 'title' | 'content', langKey: 'en' | 'te', val: string) => {
     setChapters((prev) => {
@@ -239,7 +286,7 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
       isFree,
       isPremium: !isFree,
       category,
-      coverImage: coverImage || 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
+      coverImage: coverImage,
       chapters,
       language: ebook.language || 'te',
     };
@@ -473,7 +520,7 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
                   {lang === 'te' ? 'ఈబుక్ కవర్ ఇమేజ్ (Ebook Cover Image)' : 'Ebook Cover Image'}
                 </label>
                 <span className="text-[11px] text-muted-foreground">
-                  {lang === 'te' ? 'స్టాక్ ఫుటేజ్ లేదా డివైజ్ నుండి మార్చుకోండి' : 'Change cover via stock photos or device'}
+                  {lang === 'te' ? 'స్టాక్ ఫోటోలు లేదా డివైజ్ నుండి మార్చండి' : 'Change cover via stock photos or device'}
                 </span>
               </div>
 
@@ -481,14 +528,18 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
                 {/* Live Cover Preview */}
                 <div className="md:col-span-4 flex flex-col items-center gap-2">
                   <div className="relative w-full aspect-[3/4] max-w-[160px] rounded-xl border border-border bg-black/10 dark:bg-black/40 overflow-hidden shadow-md group">
-                    <img
-                      src={coverImage || EBOOK_COVER_PRESETS[0].url}
-                      alt={titleEn || 'Ebook Cover'}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = EBOOK_COVER_PRESETS[0].url;
-                      }}
-                    />
+                    {coverImage ? (
+                      <img
+                        src={coverImage}
+                        alt={titleEn || 'Ebook Cover'}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex flex-col items-center justify-center p-3 text-center text-muted-foreground bg-muted/40">
+                        <ImageIcon className="h-8 w-8 text-muted-foreground/40 mb-1" />
+                        <span className="text-[10px] font-medium">{lang === 'te' ? 'కవర్ ఫోటో లేదు' : 'No Cover Assigned'}</span>
+                      </div>
+                    )}
                     <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md text-[9px] text-white font-medium">
                       Preview
                     </div>
@@ -501,10 +552,10 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
                         setCoverImage('');
                         setCoverImageInput('');
                       }}
-                      className="flex-1 py-1 px-2 rounded-lg border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive text-[10px] font-semibold transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-1.5 px-2 rounded-lg border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive text-[10px] font-bold transition-colors flex items-center justify-center gap-1"
                     >
                       <Trash2 className="h-3 w-3" />
-                      <span>{lang === 'te' ? 'తొలగించు' : 'Remove'}</span>
+                      <span>{lang === 'te' ? 'తీసివేయి' : 'Remove'}</span>
                     </button>
 
                     <button
@@ -513,10 +564,10 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
                         setCoverImage(ebook.coverImage || EBOOK_COVER_PRESETS[0].url);
                         setCoverImageInput('');
                       }}
-                      className="py-1 px-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground text-[10px] font-medium transition-colors flex items-center justify-center gap-1"
+                      className="py-1.5 px-2 rounded-lg border border-border bg-card hover:bg-muted text-foreground text-[10px] font-semibold transition-colors flex items-center justify-center gap-1"
                       title={lang === 'te' ? 'రీసెట్ చేయి' : 'Reset'}
                     >
-                      <RotateCcw className="h-3 w-3" />
+                      <RotateCcw className="h-3 w-3 text-muted-foreground" />
                       <span>{lang === 'te' ? 'రీసెట్' : 'Reset'}</span>
                     </button>
                   </div>
@@ -531,7 +582,7 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
                     </label>
                     <label className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-xl border border-dashed border-primary/40 bg-card hover:bg-primary/5 cursor-pointer transition-colors text-xs font-medium text-primary">
                       <Upload className="h-3.5 w-3.5" />
-                      <span>{lang === 'te' ? 'కవర్ ఫైల్ ఎంచుకోండి (Choose Cover File)' : 'Select Cover File'}</span>
+                      <span>{lang === 'te' ? 'కవర్ ఫైల్ ఎంచుకోండి (Choose File)' : 'Select Cover File'}</span>
                       <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
                     </label>
                     {uploadError && <p className="text-[10px] text-destructive mt-0.5">{uploadError}</p>}
@@ -542,7 +593,7 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
                     <label className={cn('block text-[11px] font-semibold text-foreground mb-1', isTelugu && 'font-telugu')}>
                       {lang === 'te' ? '2. ఉచిత Stock Photos (Pexels) నుండి వెతకండి' : '2. Search Free Stock Footage (Pexels)'}
                     </label>
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 mb-1.5">
                       <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                         <input
@@ -555,13 +606,30 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
                       </div>
                       <button
                         type="button"
-                        onClick={handleStockSearch}
+                        onClick={() => handleStockSearch()}
                         disabled={isSearching}
                         className="rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground flex items-center gap-1 shrink-0"
                       >
                         {isSearching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                         <span>{lang === 'te' ? 'వెతుకు' : 'Search'}</span>
                       </button>
+                    </div>
+
+                    {/* Quick Search Suggestions */}
+                    <div className="flex flex-wrap gap-1">
+                      {QUICK_SEARCH_TAGS.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery(tag);
+                            handleStockSearch(tag);
+                          }}
+                          className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 transition-colors"
+                        >
+                          + {tag}
+                        </button>
+                      ))}
                     </div>
                   </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Herb } from '@/lib/types';
@@ -69,6 +69,31 @@ export function HerbEditModal({ herb, isOpen, onClose, onSaveSuccess }: HerbEdit
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen && herb) {
+      setCommonName(herb.commonName || '');
+      setTeluguName(herb.teluguName || '');
+      setSanskritName(herb.sanskritName || '');
+      setBotanicalName(herb.botanicalName || '');
+      setCategory(herb.category || 'herbs');
+      setImageUrl(herb.imageUrl || getHerbImageUrl(herb));
+      setSearchQuery(herb.commonName || herb.englishName || 'herb plant');
+      setIntroEn(typeof herb.introduction === 'string' ? herb.introduction : herb.introduction?.en || '');
+      setIntroTe(typeof herb.introduction === 'string' ? herb.introduction : herb.introduction?.te || '');
+    }
+  }, [herb, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -291,21 +316,28 @@ export function HerbEditModal({ herb, isOpen, onClose, onSaveSuccess }: HerbEdit
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
               {/* Preview Container */}
-              <div className="md:col-span-5 flex flex-col items-center gap-2">
-                <div className="relative w-full aspect-square rounded-xl border border-border bg-black/5 dark:bg-black/40 overflow-hidden shadow-inner group">
-                  <img
-                    src={imageUrl || BOTANICAL_PRESETS[0].url}
-                    alt={commonName}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = BOTANICAL_PRESETS[0].url;
-                    }}
-                  />
+              <div className="md:col-span-5 flex flex-col items-center gap-3">
+                <div className="relative w-full aspect-square rounded-xl border border-border bg-black/5 dark:bg-black/40 overflow-hidden shadow-inner group flex items-center justify-center">
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={commonName}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-4 text-center text-muted-foreground bg-muted/30 h-full w-full">
+                      <ImageIcon className="h-10 w-10 text-muted-foreground/30 mb-2" />
+                      <span className="text-xs font-semibold">
+                        {lang === 'te' ? 'చిత్రం ఏదీ లేదు (No Image)' : 'No Image Assigned'}
+                      </span>
+                    </div>
+                  )}
                   <div className="absolute top-2 left-2 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md text-[10px] text-white font-medium">
                     {lang === 'te' ? 'లైవ్ ప్రివ్యూ' : 'Live Preview'}
                   </div>
                 </div>
 
+                {/* Remove & Reset Buttons */}
                 <div className="flex items-center gap-2 w-full">
                   <button
                     type="button"
@@ -313,22 +345,22 @@ export function HerbEditModal({ herb, isOpen, onClose, onSaveSuccess }: HerbEdit
                       setImageUrl('');
                       setImageUrlInput('');
                     }}
-                    className="flex-1 py-1.5 px-2 rounded-lg border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                    className="flex-1 py-2 px-3 rounded-xl border border-destructive/40 bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <Trash2 className="h-4 w-4" />
                     <span>{lang === 'te' ? 'చిత్రాన్ని తొలగించు' : 'Remove Image'}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => {
-                      setImageUrl(getHerbImageUrl(herb));
+                      setImageUrl(herb.imageUrl || getHerbImageUrl(herb));
                       setImageUrlInput('');
                     }}
-                    className="py-1.5 px-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground text-[11px] font-medium transition-colors flex items-center justify-center gap-1"
-                    title={lang === 'te' ? 'పాత చిత్రానికి రీసెట్ చేయి' : 'Reset to default image'}
+                    className="py-2 px-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                    title={lang === 'te' ? 'రీసెట్ చేయి' : 'Reset to default image'}
                   >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{lang === 'te' ? 'రీసెట్' : 'Reset'}</span>
                   </button>
                 </div>

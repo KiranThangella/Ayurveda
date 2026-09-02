@@ -35,17 +35,11 @@ export async function fetchAllEbooks(): Promise<Ebook[]> {
   // 1. Static built-in ebooks
   for (const eb of staticEbooks) {
     mapBySlug.set(eb.slug, eb);
+    if (eb.id) mapBySlug.set(eb.id, eb);
   }
 
-  // 2. Locally published ebooks (localStorage)
-  for (const eb of localList) {
-    mapBySlug.set(eb.slug, eb);
-  }
-
-  // 3. Server-side published ebooks (via /api/ebooks which includes Supabase)
+  // 2. Server-side published ebooks (via /api/ebooks)
   try {
-    // Only attempt fetch if we're in a browser context or have an absolute URL
-    // In server components, it might be tricky without full URL, but this is usually called from client.
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '');
     if (baseUrl || typeof window !== 'undefined') {
       const res = await fetch(`${baseUrl}/api/ebooks`, { cache: 'no-store' });
@@ -54,6 +48,7 @@ export async function fetchAllEbooks(): Promise<Ebook[]> {
         if (data && Array.isArray(data.ebooks)) {
           for (const eb of data.ebooks) {
             mapBySlug.set(eb.slug, eb);
+            if (eb.id) mapBySlug.set(eb.id, eb);
           }
         }
       }
@@ -62,7 +57,13 @@ export async function fetchAllEbooks(): Promise<Ebook[]> {
     console.warn('Failed to fetch from /api/ebooks', err);
   }
 
-  return Array.from(mapBySlug.values());
+  // 3. Locally published / user edited ebooks (localStorage) - HIGHEST PRIORITY
+  for (const eb of localList) {
+    mapBySlug.set(eb.slug, eb);
+    if (eb.id) mapBySlug.set(eb.id, eb);
+  }
+
+  return Array.from(new Set(mapBySlug.values()));
 }
 
 export async function fetchEbookBySlug(slug: string): Promise<Ebook | undefined> {
