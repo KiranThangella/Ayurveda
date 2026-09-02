@@ -19,6 +19,8 @@ import {
   Save,
   Sprout,
   Leaf,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 
 interface HerbEditModalProps {
@@ -289,10 +291,10 @@ export function HerbEditModal({ herb, isOpen, onClose, onSaveSuccess }: HerbEdit
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
               {/* Preview Container */}
-              <div className="md:col-span-5 flex flex-col items-center">
+              <div className="md:col-span-5 flex flex-col items-center gap-2">
                 <div className="relative w-full aspect-square rounded-xl border border-border bg-black/5 dark:bg-black/40 overflow-hidden shadow-inner group">
                   <img
-                    src={imageUrl}
+                    src={imageUrl || BOTANICAL_PRESETS[0].url}
                     alt={commonName}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => {
@@ -302,6 +304,33 @@ export function HerbEditModal({ herb, isOpen, onClose, onSaveSuccess }: HerbEdit
                   <div className="absolute top-2 left-2 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md text-[10px] text-white font-medium">
                     {lang === 'te' ? 'లైవ్ ప్రివ్యూ' : 'Live Preview'}
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageUrl('');
+                      setImageUrlInput('');
+                    }}
+                    className="flex-1 py-1.5 px-2 rounded-lg border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    <span>{lang === 'te' ? 'చిత్రాన్ని తొలగించు' : 'Remove Image'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageUrl(getHerbImageUrl(herb));
+                      setImageUrlInput('');
+                    }}
+                    className="py-1.5 px-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground text-[11px] font-medium transition-colors flex items-center justify-center gap-1"
+                    title={lang === 'te' ? 'పాత చిత్రానికి రీసెట్ చేయి' : 'Reset to default image'}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>{lang === 'te' ? 'రీసెట్' : 'Reset'}</span>
+                  </button>
                 </div>
               </div>
 

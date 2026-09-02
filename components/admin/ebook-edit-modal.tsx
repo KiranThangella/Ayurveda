@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import type { Ebook, EbookChapter } from '@/lib/types';
 import { saveLocalPublishedEbook } from '@/lib/data/ebooks-remote';
 import { categories } from '@/lib/data/categories';
+import { getFreshAccessToken } from '@/lib/supabase';
 import {
   X,
   Save,
@@ -21,7 +22,22 @@ import {
   Tag,
   Globe,
   Sparkles,
+  Upload,
+  Link2,
+  Search,
+  RotateCcw,
 } from 'lucide-react';
+
+const EBOOK_COVER_PRESETS = [
+  { name: 'Forest & Leaves', url: 'https://images.pexels.com/photos/12421351/pexels-photo-12421351.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+  { name: 'Herbal Tea & Spices', url: 'https://images.pexels.com/photos/1417945/pexels-photo-1417945.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+  { name: 'Rain Leaves', url: 'https://images.pexels.com/photos/7002970/pexels-photo-7002970.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+  { name: 'Mountain Forest', url: 'https://images.pexels.com/photos/167699/pexels-photo-167699.jpeg?auto=compress&cs=tinysrgb&h=650&w=940' },
+  { name: 'Turmeric Roots', url: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=1200&q=80' },
+  { name: 'Ancient Book', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=1200&q=80' },
+  { name: 'Healing Spices', url: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1200&q=80' },
+  { name: 'Sprout & Nature', url: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1200&q=80' },
+];
 
 interface EbookEditModalProps {
   ebook: Ebook;
@@ -46,6 +62,100 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
   const [category, setCategory] = useState(ebook.category || 'general-wellness');
   const [coverImage, setCoverImage] = useState(ebook.coverImage || '');
   const [status, setStatus] = useState<'completed' | 'published' | 'draft'>('completed');
+
+  // Cover Image Extra States
+  const [coverImageInput, setCoverImageInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState(ebook.title?.en || 'ayurveda book');
+  const [isSearching, setIsSearching] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // File Upload with canvas compression
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setUploadError(null);
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadError(lang === 'te' ? 'చిత్రం సైజు 10MB కంటే తక్కువగా ఉండాలి' : 'Image size must be less than 10MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          const rawDataUrl = reader.result;
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_DIM = 1200;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_DIM) {
+                height = Math.round((height * MAX_DIM) / width);
+                width = MAX_DIM;
+              }
+            } else {
+              if (height > MAX_DIM) {
+                width = Math.round((width * MAX_DIM) / height);
+                height = MAX_DIM;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressed = canvas.toDataURL('image/jpeg', 0.82);
+              setCoverImage(compressed);
+            } else {
+              setCoverImage(rawDataUrl);
+            }
+          };
+          img.onerror = () => setCoverImage(rawDataUrl);
+          img.src = rawDataUrl;
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleApplyUrl = () => {
+    if (coverImageInput.trim()) {
+      setCoverImage(coverImageInput.trim());
+      setCoverImageInput('');
+    }
+  };
+
+  const handleStockSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    setUploadError(null);
+    try {
+      const token = await getFreshAccessToken();
+      const res = await fetch(`/api/admin/search-image?q=${encodeURIComponent(searchQuery)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Invalid response from image search (${res.status})`);
+      }
+      if (data.url) {
+        setCoverImage(data.url);
+      } else {
+        setUploadError(lang === 'te' ? 'చిత్రం దొరకలేదు, మరొక పదం ప్రయత్నించండి' : 'No image found for query');
+      }
+    } catch {
+      setUploadError(lang === 'te' ? 'శోధన విఫలమైంది' : 'Search failed');
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   // Chapters list state
   const [chapters, setChapters] = useState<EbookChapter[]>(() => {
@@ -355,15 +465,159 @@ export function EbookEditModal({ ebook, isOpen, onClose, onSaveSuccess }: EbookE
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Cover Image URL</label>
-              <input
-                type="text"
-                value={coverImage}
-                onChange={(e) => setCoverImage(e.target.value)}
-                placeholder="https://..."
-                className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm outline-none focus:border-primary font-mono"
-              />
+            {/* Rich Ebook Cover Image Management */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <label className={cn('block text-xs font-bold text-foreground flex items-center gap-2', isTelugu && 'font-telugu')}>
+                  <ImageIcon className="h-4 w-4 text-primary" />
+                  {lang === 'te' ? 'ఈబుక్ కవర్ ఇమేజ్ (Ebook Cover Image)' : 'Ebook Cover Image'}
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  {lang === 'te' ? 'స్టాక్ ఫుటేజ్ లేదా డివైజ్ నుండి మార్చుకోండి' : 'Change cover via stock photos or device'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                {/* Live Cover Preview */}
+                <div className="md:col-span-4 flex flex-col items-center gap-2">
+                  <div className="relative w-full aspect-[3/4] max-w-[160px] rounded-xl border border-border bg-black/10 dark:bg-black/40 overflow-hidden shadow-md group">
+                    <img
+                      src={coverImage || EBOOK_COVER_PRESETS[0].url}
+                      alt={titleEn || 'Ebook Cover'}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = EBOOK_COVER_PRESETS[0].url;
+                      }}
+                    />
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md text-[9px] text-white font-medium">
+                      Preview
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 w-full max-w-[160px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCoverImage('');
+                        setCoverImageInput('');
+                      }}
+                      className="flex-1 py-1 px-2 rounded-lg border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive text-[10px] font-semibold transition-colors flex items-center justify-center gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>{lang === 'te' ? 'తొలగించు' : 'Remove'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCoverImage(ebook.coverImage || EBOOK_COVER_PRESETS[0].url);
+                        setCoverImageInput('');
+                      }}
+                      className="py-1 px-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground text-[10px] font-medium transition-colors flex items-center justify-center gap-1"
+                      title={lang === 'te' ? 'రీసెట్ చేయి' : 'Reset'}
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>{lang === 'te' ? 'రీసెట్' : 'Reset'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Upload & Stock Photo Options */}
+                <div className="md:col-span-8 space-y-3">
+                  {/* 1. File Upload */}
+                  <div>
+                    <label className={cn('block text-[11px] font-semibold text-foreground mb-1', isTelugu && 'font-telugu')}>
+                      {lang === 'te' ? '1. డివైజ్ నుండి ఇమేజ్ ఫైల్ అప్‌లోడ్ చేయండి' : '1. Upload Image from Device'}
+                    </label>
+                    <label className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-xl border border-dashed border-primary/40 bg-card hover:bg-primary/5 cursor-pointer transition-colors text-xs font-medium text-primary">
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>{lang === 'te' ? 'కవర్ ఫైల్ ఎంచుకోండి (Choose Cover File)' : 'Select Cover File'}</span>
+                      <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                    </label>
+                    {uploadError && <p className="text-[10px] text-destructive mt-0.5">{uploadError}</p>}
+                  </div>
+
+                  {/* 2. Free Stock Photo Search */}
+                  <div>
+                    <label className={cn('block text-[11px] font-semibold text-foreground mb-1', isTelugu && 'font-telugu')}>
+                      {lang === 'te' ? '2. ఉచిత Stock Photos (Pexels) నుండి వెతకండి' : '2. Search Free Stock Footage (Pexels)'}
+                    </label>
+                    <div className="flex gap-1.5">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="e.g. ayurveda, nature, healing..."
+                          className="w-full rounded-xl border border-border bg-card py-1.5 pl-8 pr-2.5 text-xs outline-none focus:border-primary"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleStockSearch}
+                        disabled={isSearching}
+                        className="rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground flex items-center gap-1 shrink-0"
+                      >
+                        {isSearching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        <span>{lang === 'te' ? 'వెతుకు' : 'Search'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3. Direct URL */}
+                  <div>
+                    <label className={cn('block text-[11px] font-semibold text-foreground mb-1', isTelugu && 'font-telugu')}>
+                      {lang === 'te' ? '3. లేదా Image URL పేస్ట్ చేయండి' : '3. Or Paste Image URL'}
+                    </label>
+                    <div className="flex gap-1.5">
+                      <div className="relative flex-1">
+                        <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                          type="url"
+                          value={coverImageInput}
+                          onChange={(e) => setCoverImageInput(e.target.value)}
+                          placeholder="https://images.unsplash.com/..."
+                          className="w-full rounded-xl border border-border bg-card py-1.5 pl-8 pr-2.5 text-xs outline-none focus:border-primary"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyUrl}
+                        disabled={!coverImageInput.trim()}
+                        className="rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        {lang === 'te' ? 'వర్తించు' : 'Apply'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Presets Gallery */}
+              <div className="pt-2 border-t border-border/40">
+                <label className={cn('block text-[11px] font-semibold text-muted-foreground mb-1.5', isTelugu && 'font-telugu')}>
+                  {lang === 'te' ? 'లేదా తక్షణమైన బుక్ కవర్ గ్యాలరీ నుండి ఎంచుకోండి:' : 'Or pick from Quick Book Cover Presets:'}
+                </label>
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 max-h-24 overflow-y-auto pr-1">
+                  {EBOOK_COVER_PRESETS.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setCoverImage(preset.url)}
+                      className={cn(
+                        'relative aspect-[3/4] rounded-lg overflow-hidden border transition-all group',
+                        coverImage === preset.url ? 'border-primary ring-2 ring-primary/40 scale-95' : 'border-border/60 hover:border-primary/50'
+                      )}
+                    >
+                      <img src={preset.url} alt={preset.name} className="h-full w-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[8px] text-white text-center p-0.5 font-medium leading-tight">
+                        {preset.name}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
