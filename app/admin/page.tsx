@@ -31,6 +31,7 @@ import type { Ebook } from '@/lib/types';
 import { ApiHealthTab } from '@/components/admin/api-health-tab';
 import { EbookEditModal } from '@/components/admin/ebook-edit-modal';
 import { EbookCover } from '@/components/ebook-cover';
+import { HerbsTab } from '@/components/admin/herbs-tab';
 
 interface AiGeneratedChapter {
   chapterNumber: number;
@@ -73,7 +74,7 @@ async function getFreshAccessToken(): Promise<string> {
   return 'demo-admin-token';
 }
 
-type AdminTab = 'overview' | 'generate' | 'ebooks' | 'health' | 'safety';
+type AdminTab = 'overview' | 'generate' | 'ebooks' | 'herbs' | 'health' | 'safety';
 
 export default function AdminPage() {
   const { t, lang, isTelugu } = useLanguage();
@@ -173,6 +174,7 @@ export default function AdminPage() {
               { id: 'overview' as const, label: t('admin.overview'), icon: LayoutDashboard },
               { id: 'generate' as const, label: lang === 'te' ? 'పుస్తక సృష్టి' : 'Generate Ebook', icon: Sparkles },
               { id: 'ebooks' as const, label: lang === 'te' ? 'పుస్తకాలు' : 'Ebooks', icon: BookOpen },
+              { id: 'herbs' as const, label: lang === 'te' ? 'మూలికలు (Herbs)' : 'Herbs', icon: Sprout },
               { id: 'health' as const, label: lang === 'te' ? 'API హెల్త్' : 'API Health', icon: Activity },
               { id: 'safety' as const, label: t('admin.safetyFlags'), icon: AlertTriangle },
             ]).map((tabItem) => {
@@ -202,6 +204,7 @@ export default function AdminPage() {
         {tab === 'overview' && <OverviewTab lang={lang} isTelugu={isTelugu} t={t} />}
         {tab === 'generate' && <GenerateTab lang={lang} isTelugu={isTelugu} t={t} accessToken={session?.access_token} />}
         {tab === 'ebooks' && <EbooksTab lang={lang} isTelugu={isTelugu} t={t} />}
+        {tab === 'herbs' && <HerbsTab lang={lang} isTelugu={isTelugu} t={t} />}
         {tab === 'health' && <ApiHealthTab lang={lang} isTelugu={isTelugu} t={t} />}
         {tab === 'safety' && <SafetyTab lang={lang} isTelugu={isTelugu} t={t} accessToken={session?.access_token} />}
       </div>

@@ -15,3 +15,11 @@ export function getSupabaseClient(): SupabaseClient {
 }
 
 export const supabase = getSupabaseClient();
+
+export async function getFreshAccessToken(): Promise<string> {
+  try {
+    const { data } = await getSupabaseClient().auth.getSession();
+    if (data.session?.access_token) return data.session.access_token;
+  } catch {}
+  return 'demo-admin-token';
+}

@@ -18,7 +18,19 @@ export default function HerbsPage() {
     fetchGeneratedHerbs().then(setGeneratedHerbs);
   }, []);
 
-  const herbs = [...staticHerbs, ...generatedHerbs.filter((g) => !staticHerbs.some((s) => s.slug === g.slug))];
+  const staticMerged = staticHerbs.map((sh) => {
+    const remoteMatch = generatedHerbs.find((g) => g.slug === sh.slug);
+    if (remoteMatch) {
+      return {
+        ...sh,
+        ...remoteMatch,
+        imageUrl: remoteMatch.imageUrl || sh.imageUrl,
+      };
+    }
+    return sh;
+  });
+  const extraRemote = generatedHerbs.filter((g) => !staticHerbs.some((s) => s.slug === g.slug));
+  const herbs = [...staticMerged, ...extraRemote];
 
   const filtered = herbs.filter((h) => {
     if (!query) return true;
